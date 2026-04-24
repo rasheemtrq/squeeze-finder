@@ -3,12 +3,24 @@ Black-Scholes pricing and greeks for European calls.
 Inputs use decimal (0.35 = 35%), outputs use per-contract conventions:
   - theta: per calendar day
   - vega: per 1 percentage point of IV
+
+Uses math.erf to avoid a scipy dependency.
 """
 from __future__ import annotations
 
 import math
 
-from scipy.stats import norm
+
+_SQRT_2 = math.sqrt(2)
+_INV_SQRT_2PI = 1.0 / math.sqrt(2 * math.pi)
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / _SQRT_2))
+
+
+def _norm_pdf(x: float) -> float:
+    return _INV_SQRT_2PI * math.exp(-0.5 * x * x)
 
 
 def bs_call(
@@ -29,9 +41,9 @@ def bs_call(
     d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
     d2 = d1 - sigma * sqrt_T
 
-    Nd1 = norm.cdf(d1)
-    Nd2 = norm.cdf(d2)
-    nd1 = norm.pdf(d1)
+    Nd1 = _norm_cdf(d1)
+    Nd2 = _norm_cdf(d2)
+    nd1 = _norm_pdf(d1)
 
     disc_q = math.exp(-q * T)
     disc_r = math.exp(-r * T)
