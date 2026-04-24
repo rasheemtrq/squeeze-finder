@@ -1,0 +1,333 @@
+"""
+Per-factor scoring functions. Each returns (score_0_100, signals_dict).
+Signals dict contains the raw inputs + interpretation flags used to populate
+the UI factor breakdown and the `ticker-deepdive` output.
+"""
+from __future__ import annotations
+
+import math
+from datetime import datetime, timezone
+from typing import Any
+
+
+def _clip(x: float, lo: float = 0, hi: float = 100) -> float:
+    return max(lo, min(hi, x))
+
+
+def _score_stocktwits(st: dict) -> tuple[float, dict]:
+    n = st["messages_sampled"]
+    bull = st["bull_ratio"]
+    classified = st["bullish"] + st["bearish"]
+    lookback = st.get("lookback_hours", 0)
+
+    base = {
+        "st_n": n,
+        "st_bull_ratio": bull,
+        "st_bullish": st["bullish"],
+        "st_bearish": st["bearish"],
+        "st_lookback_hours": lookback,
+    }
+
+    if n < 20 or classified < 10:
+        return _clip(30 + (bull - 0.5) * 20, 0, 50), {**base, "st_flag": "low_sample"}
+
+    volume_score = _clip(math.log2(max(n, 1) / 10) * 12, 0, 40)
+    ratio_score = (bull - 0.5) * 80
+    activity_bonus = 20 if n >= 100 else (10 if n >= 50 else 0)
+    score = _clip(volume_score + ratio_score + activity_bonus + 20, 0, 100)
+
+    st_flag = None
+    if n >= 50 and bull >= 0.70:
+        st_flag = "hot"
+    elif bull <= 0.35:
+        st_flag = "bearish_crowd"
+    elif lookback and lookback < 4 and n >= 50:
+        st_flag = "velocity_spike"
+
+    return score, {**base, "st_flag": st_flag}
+
+
+def _score_wsb(wsb: dict) -> tuple[float, dict]:
+    """Apewisdom WSB rank + mention velocity."""
+    rank = wsb["rank"]
+    mentions = wsb["mentions"]
+    velocity = wsb.get("velocity")
+    rank_prior = wsb.get("rank_24h_ago")
+
+    rank_component = 100 * (101 - min(rank, 100)) / 100  # rank 1 → 100, 100 → 1
+    velocity_component = 0
+    if velocity is not None and velocity > 1:
+        velocity_component = min(30, (velocity - 1) * 30)
+    elif velocity is not None and velocity < 1:
+        velocity_component = max(-15, (velocity - 1) * 30)
+
+    rank_momentum = 0
+    if rank_prior:
+        rank_delta = rank_prior - rank  # positive = rank improved
+        rank_momentum = max(-10, min(15, rank_delta * 0.5))
+
+    score = _clip(rank_component * 0.7 + velocity_component + rank_momentum + 10)
+
+    wsb_flag = None
+    if rank <= 10 and velocity and velocity >= 2:
+        wsb_flag = "wsb_surge"
+    elif rank <= 20:
+        wsb_flag = "wsb_top20"
+    elif velocity and velocity >= 2:
+        wsb_flag = "wsb_accelerating"
+    elif velocity and velocity < 0.5:
+        wsb_flag = "wsb_fading"
+
+    return score, {
+        "wsb_rank": rank,
+        "wsb_mentions": mentions,
+        "wsb_upvotes": wsb.get("upvotes"),
+        "wsb_rank_24h_ago": rank_prior,
+        "wsb_velocity": velocity,
+        "wsb_flag": wsb_flag,
+    }
+
+
+def score_sentiment(st: dict | None, wsb: dict | None = None) -> tuple[float, dict]:
+    """Blends StockTwits (broad retail) + Apewisdom WSB (squeeze-specific)."""
+    if not st and not wsb:
+        return 0.0, {"reason": "no_data"}
+
+    st_score = None
+    st_signals: dict = {}
+    if st:
+        st_score, st_signals = _score_stocktwits(st)
+
+    wsb_score = None
+    wsb_signals: dict = {"wsb_in_top100": False}
+    if wsb:
+        wsb_score, wsb_signals = _score_wsb(wsb)
+        wsb_signals["wsb_in_top100"] = True
+
+    if st_score is not None and wsb_score is not None:
+        score = 0.5 * st_score + 0.5 * wsb_score
+    elif wsb_score is not None:
+        score = wsb_score * 0.85
+    else:
+        score = st_score or 0
+
+    flag = None
+    st_flag = st_signals.get("st_flag")
+    wsb_flag = wsb_signals.get("wsb_flag")
+    if st_flag == "hot" and wsb_flag in ("wsb_surge", "wsb_top20", "wsb_accelerating"):
+        flag = "convergent_bullish"
+    elif wsb_flag == "wsb_surge":
+        flag = "wsb_surge"
+    elif st_flag == "hot":
+        flag = "hot"
+    elif st_flag == "bearish_crowd" or wsb_flag == "wsb_fading":
+        flag = st_flag or wsb_flag
+
+    return score, {**st_signals, **wsb_signals, "flag": flag}
+
+
+def score_options(opt: dict | None) -> tuple[float, dict]:
+    if not opt:
+        return 0.0, {"reason": "no_data"}
+
+    cpr = opt["call_put_ratio"] or 0
+    gamma = opt["gamma_concentration"] or 0
+    dte = opt["days_to_expiry"] or 99
+    call_oi = opt["call_oi"]
+    put_oi = opt["put_oi"]
+
+    cpr_component = _clip(20 * math.log2(max(cpr, 0.25)) + 20, 0, 40) if cpr > 0 else 0
+    gamma_component = _clip(gamma * 100, 0, 40)
+    dte_component = 20 if dte <= 14 else (10 if dte <= 30 else 0)
+    score = _clip(cpr_component + gamma_component + dte_component)
+
+    flag = None
+    if gamma >= 0.4 and dte <= 14:
+        flag = "gamma_setup"
+    elif cpr >= 3:
+        flag = "call_heavy"
+    elif call_oi + put_oi < 1000:
+        flag = "thin_options"
+
+    return score, {
+        "call_put_ratio": cpr,
+        "gamma_concentration": gamma,
+        "days_to_expiry": dte,
+        "call_oi": call_oi,
+        "put_oi": put_oi,
+        "flag": flag,
+    }
+
+
+def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]:
+    """
+    Combines structural SI (yf: % float, DTC) with FINRA daily short-volume
+    momentum (trend + latest ratio) for a freshness-aware signal.
+    """
+    if not fund:
+        return 0.0, {"reason": "no_data"}
+
+    si_pct = fund.get("short_percent_of_float") or 0
+    dtc = fund.get("short_ratio") or 0
+    si_date = fund.get("shares_short_date")
+
+    pct_component = 40 * min(si_pct / 0.30, 1) if si_pct else 0
+    dtc_component = 30 * min(dtc / 10, 1) if dtc else 0
+
+    finra_component = 0
+    finra_info: dict = {}
+    if finra and finra.get("latest_short_ratio") is not None:
+        latest = finra["latest_short_ratio"]
+        avg = finra["avg_short_ratio"]
+        trend = finra.get("trend")
+        finra_info = {
+            "finra_latest_short_ratio": latest,
+            "finra_avg_short_ratio": avg,
+            "finra_trend": trend,
+            "finra_latest_date": finra.get("latest_date"),
+        }
+        # high short-vol ratio (>40% of daily volume sold short) = active pressure
+        finra_component = 30 * min(max(latest - 0.30, 0) / 0.30, 1)
+        if trend == "rising":
+            finra_component += 5
+        elif trend == "falling":
+            finra_component -= 5
+        finra_component = max(0, min(30, finra_component))
+
+    score = _clip(pct_component + dtc_component + finra_component)
+
+    stale = False
+    if si_date:
+        try:
+            dt = datetime.fromtimestamp(si_date, tz=timezone.utc) if isinstance(si_date, (int, float)) else None
+            if dt:
+                age_days = (datetime.now(timezone.utc) - dt).days
+                if age_days > 20:
+                    stale = True
+                    if not finra_info:
+                        score = min(score, 50)
+        except Exception:
+            pass
+
+    flag = None
+    if si_pct and si_pct >= 0.20 and dtc and dtc >= 5:
+        flag = "squeeze_setup"
+    elif si_pct and si_pct >= 0.30:
+        flag = "extreme_si"
+    if finra_info and finra_info.get("finra_latest_short_ratio", 0) >= 0.50 and finra_info.get("finra_trend") == "rising":
+        flag = "shorts_piling_in"
+    if stale and not finra_info:
+        flag = f"{flag or ''}_STALE".lstrip("_")
+
+    return score, {
+        "si_pct": si_pct,
+        "dtc": dtc,
+        "si_as_of_epoch": si_date,
+        "stale_yf": stale,
+        **finra_info,
+        "flag": flag,
+    }
+
+
+def score_ta(prices: dict | None) -> tuple[float, dict]:
+    if not prices or not prices.get("bars"):
+        return 0.0, {"reason": "no_data"}
+
+    bars = prices["bars"]
+    if len(bars) < 60:
+        return 0.0, {"reason": "insufficient_history"}
+
+    closes = [b["close"] for b in bars]
+    highs = [b["high"] for b in bars]
+    volumes = [b["volume"] for b in bars]
+
+    last_close = closes[-1]
+    prior_high_60 = max(highs[-61:-1])
+    breakout = 1 if last_close > prior_high_60 else 0
+
+    vol_20_avg = sum(volumes[-21:-1]) / 20
+    rvol = volumes[-1] / vol_20_avg if vol_20_avg > 0 else 0
+
+    # RSI14
+    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains = [d if d > 0 else 0 for d in deltas[-14:]]
+    losses = [-d if d < 0 else 0 for d in deltas[-14:]]
+    avg_gain = sum(gains) / 14
+    avg_loss = sum(losses) / 14
+    rs = avg_gain / avg_loss if avg_loss > 0 else 100
+    rsi = 100 - (100 / (1 + rs))
+
+    breakout_score = 40 * breakout
+    if breakout and rvol < 1.5:
+        breakout_score /= 2
+
+    rvol_score = 30 * min(rvol / 3, 1)
+
+    if rsi > 80:
+        rsi_score = 0
+    else:
+        rsi_score = 30 * max(0, (rsi - 50) / 20)
+
+    score = _clip(breakout_score + rvol_score + rsi_score)
+
+    flag = None
+    if breakout and rvol >= 2:
+        flag = "breakout_highvol"
+    elif breakout:
+        flag = "breakout_lowvol"
+    elif rsi > 80:
+        flag = "overextended"
+    elif rvol >= 3:
+        flag = "volume_spike"
+
+    return score, {
+        "last_close": last_close,
+        "prior_high_60": prior_high_60,
+        "breakout": bool(breakout),
+        "rvol": round(rvol, 2),
+        "rsi14": round(rsi, 1),
+        "flag": flag,
+    }
+
+
+def score_catalyst(cat: dict | None) -> tuple[float, dict]:
+    if not cat:
+        return 0.0, {"reason": "no_data"}
+
+    dte = cat.get("days_to_event")
+    if dte is None:
+        return 0.0, {"reason": "no_event"}
+
+    score = 100 * max(0, 1 - dte / 30)
+
+    flag = None
+    if dte <= 7:
+        flag = "imminent"
+    elif dte <= 14:
+        flag = "near"
+
+    return _clip(score), {
+        "next_event": cat.get("next_event"),
+        "days_to_event": dte,
+        "flag": flag,
+    }
+
+
+def compute_all(bundle: dict[str, Any]) -> dict[str, Any]:
+    """
+    bundle = {stocktwits, options, fundamentals, prices, catalysts}
+    Returns factor scores and signal dicts.
+    """
+    s_sent, sig_sent = score_sentiment(bundle.get("stocktwits"), bundle.get("apewisdom"))
+    s_opt, sig_opt = score_options(bundle.get("options"))
+    s_si, sig_si = score_si(bundle.get("fundamentals"), bundle.get("finra"))
+    s_ta, sig_ta = score_ta(bundle.get("prices"))
+    s_cat, sig_cat = score_catalyst(bundle.get("catalysts"))
+
+    return {
+        "sentiment": {"score": round(s_sent, 1), "signals": sig_sent},
+        "options": {"score": round(s_opt, 1), "signals": sig_opt},
+        "si": {"score": round(s_si, 1), "signals": sig_si},
+        "ta": {"score": round(s_ta, 1), "signals": sig_ta},
+        "catalyst": {"score": round(s_cat, 1), "signals": sig_cat},
+    }
