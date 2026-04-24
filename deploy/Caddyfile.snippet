@@ -1,0 +1,22 @@
+# Add this block to your existing /etc/caddy/Caddyfile.
+# Auto-HTTPS via Caddy's built-in LetsEncrypt. Just reload: systemctl reload caddy
+
+SQUEEZE_HOST {
+    reverse_proxy 127.0.0.1:8100 {
+        transport http {
+            dial_timeout 10s
+            response_header_timeout 180s
+        }
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Quiet health-check logs
+    @health path /api/health
+    log {
+        output file /var/log/caddy/squeeze-finder.log
+        format console
+    }
+}

@@ -12,6 +12,15 @@ from pydantic import BaseModel
 
 logger = logging.getLogger("squeeze-finder")
 
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if o.strip()
+]
+
 from src import tracker
 from src.analyst.openrouter import OpenRouterError, facts_block, generate_narrative
 from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
@@ -50,7 +59,7 @@ app = FastAPI(title="squeeze-finder", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -58,7 +67,11 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "universe": len(DEFAULT_UNIVERSE)}
+    return {
+        "ok": True,
+        "universe": len(DEFAULT_UNIVERSE),
+        "cors_origins": CORS_ORIGINS,
+    }
 
 
 @app.get("/api/scan")
