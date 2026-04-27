@@ -30,8 +30,11 @@ DTE_MIN = 14
 DTE_MAX = 45
 STRIKE_OTM_MAX = 0.25
 MIN_OI = 50
+MIN_VOLUME_FALLBACK = 200  # used as liquidity proxy when chain is stale (pre/post market)
 MAX_SPREAD_PCT = 0.25
 RISK_FREE_RATE = 0.045
+IV_STALE_THRESHOLD = 0.05  # below this, IV is yfinance garbage from zero quotes
+IV_FALLBACK = 0.6  # typical for squeeze candidates; used only when IV looks broken
 
 
 def _dte(expiry_ymd: str) -> int:
@@ -140,6 +143,7 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
     candidates: list[dict] = []
     expiries_in_range = [e for e in expiries if DTE_MIN <= _dte(e) <= DTE_MAX]
     expiries_scanned: list[str] = list(expiries_in_range)
+    any_chain_stale = False
 
     def _fetch_chain(exp: str):
         try:
@@ -177,6 +181,13 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
             if col in calls.columns:
                 calls[col] = calls[col].fillna(0)
 
+        # Detect stale chain: all bid+ask zero = market closed / pre-market.
+        # In this state, OI is also typically 0 from yfinance, IV is garbage,
+        # but lastPrice + volume reflect last trading session and are usable.
+        chain_stale = bool(((calls["bid"] == 0) & (calls["ask"] == 0)).all())
+        if chain_stale:
+            any_chain_stale = True
+
         T = max(dte, 0.5) / 365.0
 
         for _, row in calls.iterrows():
@@ -188,22 +199,29 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
             oi = int(row["openInterest"])
             iv = float(row["impliedVolatility"])
 
+            # Liquidity gate: prefer OI, but fall back to volume when chain is stale
             if oi < MIN_OI:
-                continue
+                if not (chain_stale and volume >= MIN_VOLUME_FALLBACK):
+                    continue
 
+            # Pricing: prefer mid, fall back to last when bid/ask zero
             if bid > 0 and ask > 0 and ask >= bid:
                 mid = (bid + ask) / 2
                 spread_pct = (ask - bid) / mid if mid > 0 else None
             elif last > 0:
                 mid = last
-                spread_pct = None
+                spread_pct = None  # spread unknown when stale
             else:
                 continue
 
             if mid <= 0.05 or (spread_pct is not None and spread_pct > MAX_SPREAD_PCT):
                 continue
 
-            greeks = bs_call(S=spot, K=strike, T=T, r=RISK_FREE_RATE, sigma=iv or 0.5, q=q)
+            # Greeks: when IV is garbage from zero-quote chain, use a sensible
+            # fallback so the greeks aren't wildly wrong. Flag the contract.
+            iv_is_stale = iv < IV_STALE_THRESHOLD
+            iv_for_greeks = IV_FALLBACK if iv_is_stale else iv
+            greeks = bs_call(S=spot, K=strike, T=T, r=RISK_FREE_RATE, sigma=iv_for_greeks, q=q)
             delta = greeks["delta"] if greeks else None
             gamma = greeks["gamma"] if greeks else None
             theta = greeks["theta"] if greeks else None
@@ -229,6 +247,7 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
                 "volume": volume,
                 "open_interest": oi,
                 "iv": round(iv, 3),
+                "iv_stale": iv_is_stale,
                 "delta": round(delta, 3),
                 "gamma": round(gamma, 4) if gamma else None,
                 "theta": round(theta, 3) if theta else None,
@@ -237,6 +256,7 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
                 "cost_per_contract": round(mid * 100, 2),
                 "pct_otm": round(strike / spot - 1, 3),
                 "near_max_gamma": near_max_gamma,
+                "chain_stale": chain_stale,
             }
             contract["score"] = _score(contract)
             contract["rationale"] = _rationale(contract, spot)
@@ -254,6 +274,7 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
         "expiries_scanned": expiries_scanned,
         "candidates_total": len(candidates),
         "recommendations": top,
+        "stale_quotes": any_chain_stale,
         "filters": {
             "dte_min": DTE_MIN,
             "dte_max": DTE_MAX,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { Zap, Info, Wallet } from "lucide-react";
+import { Zap, Info, Wallet, Clock } from "lucide-react";
 import { fetchOptions, type OptionsRec, type OptionContract } from "@/lib/api";
 
 type Sizing = {
@@ -161,6 +161,19 @@ export function OptionsRecommendations({ symbol }: { symbol: string }) {
 
           {data.recommendations.length > 0 && (
             <>
+              {data.stale_quotes && (
+                <div className="flex items-start gap-2 px-4 py-3 border-b border-[var(--border)] bg-[var(--warning)]/10">
+                  <Clock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[var(--warning-fg)]" />
+                  <div className="text-[11px] mono leading-relaxed">
+                    <span className="text-[var(--warning-fg)] font-medium">market closed</span>
+                    <span className="text-[var(--muted)]">
+                      {" "}— quotes show last-trade prices from prior session.
+                      bid/ask, OI, and IV refresh after 9:30 ET. Greeks computed with 60% IV
+                      fallback for stale chains. Confirm at your broker before entry.
+                    </span>
+                  </div>
+                </div>
+              )}
               <RecommendationCards
                 contracts={data.recommendations.slice(0, 3)}
                 spot={data.spot}

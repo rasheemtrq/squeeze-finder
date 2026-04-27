@@ -155,6 +155,7 @@ export type OptionContract = {
   volume: number;
   open_interest: number;
   iv: number;
+  iv_stale?: boolean;
   delta: number;
   gamma: number | null;
   theta: number | null;
@@ -163,6 +164,7 @@ export type OptionContract = {
   cost_per_contract: number;
   pct_otm: number;
   near_max_gamma: boolean;
+  chain_stale?: boolean;
   score: number;
   rationale: string;
 };
@@ -176,6 +178,7 @@ export type OptionsRec = {
   expiries_scanned: string[];
   candidates_total: number;
   recommendations: OptionContract[];
+  stale_quotes?: boolean;
   filters: Record<string, number>;
 };
 
