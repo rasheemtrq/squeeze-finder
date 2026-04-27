@@ -19,18 +19,22 @@ log() { echo -e "\033[1;36m[squeeze-finder]\033[0m $*"; }
 
 cd "$INSTALL_DIR"
 
-OLD_HEAD=$(git rev-parse HEAD)
+# All git operations run as the repo owner ($SERVICE_USER) to avoid
+# git's "dubious ownership" safe.directory check when invoked as root.
+as_user() { sudo -u "$SERVICE_USER" "$@"; }
+
+OLD_HEAD=$(as_user git rev-parse HEAD)
 log "pulling"
-sudo -u "$SERVICE_USER" git pull --ff-only
-NEW_HEAD=$(git rev-parse HEAD)
+as_user git pull --ff-only
+NEW_HEAD=$(as_user git rev-parse HEAD)
 
 if [[ "$OLD_HEAD" == "$NEW_HEAD" ]]; then
     log "already at $NEW_HEAD — restarting service only"
 else
     log "updated $OLD_HEAD → $NEW_HEAD"
-    if git diff --name-only "$OLD_HEAD" "$NEW_HEAD" | grep -qE '^(pyproject\.toml|uv\.lock)$'; then
+    if as_user git diff --name-only "$OLD_HEAD" "$NEW_HEAD" | grep -qE '^(pyproject\.toml|uv\.lock)$'; then
         log "dependency change detected — reinstalling"
-        sudo -u "$SERVICE_USER" /usr/local/bin/uv pip install -e .
+        as_user /usr/local/bin/uv pip install -e .
     fi
 fi
 
