@@ -112,7 +112,7 @@ def ticker_endpoint(symbol: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e)) from e
     if result.get("excluded"):
         raise HTTPException(status_code=422, detail=f"excluded: {result.get('exclude_reason')}")
-    return result
+    return {**result, "weights": DEFAULT_WEIGHTS}
 
 
 @app.get("/api/ticker/{symbol}/narrative")

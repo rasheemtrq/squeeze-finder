@@ -23,6 +23,7 @@ export type TickerResult = {
   exclude_reason: string | null;
   as_of: string;
   errors: Record<string, string>;
+  weights?: { sentiment: number; options: number; si: number; ta: number; catalyst: number };
 };
 
 export type ScanResult = {

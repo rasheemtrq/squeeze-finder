@@ -10,6 +10,22 @@ import { Logo } from "@/components/Logo";
 import { PriceChart } from "@/components/PriceChart";
 import { OptionsRecommendations } from "@/components/OptionsRecommendations";
 
+function fmtSignal(v: unknown): string {
+  if (typeof v === "number") {
+    if (!isFinite(v)) return "–";
+    if (Number.isInteger(v)) return v.toLocaleString();
+    const abs = Math.abs(v);
+    if (abs >= 100) return v.toFixed(0);
+    if (abs >= 1) return v.toFixed(2);
+    if (abs > 0) return v.toFixed(4);
+    return "0";
+  }
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (v == null) return "–";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
 async function TickerDetail({ symbol }: { symbol: string }) {
   let data;
   try {
@@ -24,7 +40,13 @@ async function TickerDetail({ symbol }: { symbol: string }) {
   }
 
   const f = data.factors;
-  const weights = { sentiment: 0.25, options: 0.25, si: 0.25, ta: 0.15, catalyst: 0.1 };
+  const weights = data.weights ?? {
+    sentiment: 0.30,
+    options: 0.25,
+    si: 0.20,
+    ta: 0.15,
+    catalyst: 0.10,
+  };
 
   return (
     <div className="space-y-6">
@@ -99,11 +121,7 @@ async function TickerDetail({ symbol }: { symbol: string }) {
                     <div key={key} className="flex justify-between gap-2">
                       <span className="text-[var(--muted)]">{key}</span>
                       <span className="text-right tabular-nums truncate">
-                        {typeof val === "object"
-                          ? JSON.stringify(val)
-                          : val == null
-                            ? "–"
-                            : String(val)}
+                        {fmtSignal(val)}
                       </span>
                     </div>
                   ))}
