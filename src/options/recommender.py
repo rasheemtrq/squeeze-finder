@@ -170,16 +170,23 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
         if calls.empty:
             continue
 
+        # Coerce NaN to 0 at the boundary — yfinance returns NaN for illiquid
+        # strikes, and `NaN or 0` is NaN in Python (NaN is truthy), which
+        # then crashes int(NaN).
+        for col in ("bid", "ask", "lastPrice", "volume", "openInterest", "impliedVolatility"):
+            if col in calls.columns:
+                calls[col] = calls[col].fillna(0)
+
         T = max(dte, 0.5) / 365.0
 
         for _, row in calls.iterrows():
             strike = float(row["strike"])
-            bid = float(row["bid"] or 0)
-            ask = float(row["ask"] or 0)
-            last = float(row["lastPrice"] or 0)
-            volume = int(row["volume"] or 0)
-            oi = int(row["openInterest"] or 0)
-            iv = float(row["impliedVolatility"] or 0)
+            bid = float(row["bid"])
+            ask = float(row["ask"])
+            last = float(row["lastPrice"])
+            volume = int(row["volume"])
+            oi = int(row["openInterest"])
+            iv = float(row["impliedVolatility"])
 
             if oi < MIN_OI:
                 continue
