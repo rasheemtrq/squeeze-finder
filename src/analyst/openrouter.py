@@ -1,6 +1,6 @@
 """
-OpenRouter free-tier client for analyst narrative generation.
-Tries models in priority order, falls back on failure or empty response.
+OpenRouter client for analyst narrative generation.
+Uses Claude Haiku 4.5 — paid; ~$0.004 per narrative call.
 Output is always a structured dict: {tldr, bull: [...], bear: [...], model_used}.
 """
 from __future__ import annotations
@@ -15,14 +15,9 @@ from src.config import OPENROUTER_API_KEY
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
-FREE_MODELS = [
-    "openai/gpt-oss-120b:free",
-    "minimax/minimax-m2.5:free",
-    "z-ai/glm-4.5-air:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemma-3-27b-it:free",
+MODELS = [
+    "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-4-5",  # fallback — some routers use dash, not dot
 ]
 
 SYSTEM = (
@@ -107,15 +102,15 @@ def _validate(obj: Any) -> dict | None:
 
 
 def generate_narrative(facts: dict) -> dict:
-    """Try free models until one returns a valid structured response."""
+    """Generate via Claude Haiku 4.5 (paid). Tries id variants for routing safety."""
     facts_json = json.dumps(facts, default=str, indent=2)
     last_error = None
 
-    for model in FREE_MODELS:
+    for model in MODELS:
         try:
             raw = _call(model, facts_json)
         except httpx.HTTPStatusError as e:
-            last_error = f"{model}: http {e.response.status_code}"
+            last_error = f"{model}: http {e.response.status_code} {e.response.text[:200]}"
             continue
         except Exception as e:
             last_error = f"{model}: {e}"
@@ -126,7 +121,7 @@ def generate_narrative(facts: dict) -> dict:
             return {**validated, "model_used": model}
         last_error = f"{model}: invalid response shape"
 
-    raise OpenRouterError(f"all free models failed; last: {last_error}")
+    raise OpenRouterError(f"narrative generation failed; last: {last_error}")
 
 
 def facts_block(ticker_result: dict) -> dict:

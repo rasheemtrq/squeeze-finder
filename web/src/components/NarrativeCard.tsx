@@ -34,7 +34,7 @@ export function NarrativeCard({ symbol }: { symbol: string }) {
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[var(--accent)]" />
           <div className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
-            ai analyst · free model
+            ai analyst · claude haiku 4.5
           </div>
         </div>
         {data && (

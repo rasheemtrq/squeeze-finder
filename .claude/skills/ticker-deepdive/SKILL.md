@@ -1,6 +1,6 @@
 ---
 name: ticker-deepdive
-description: Structured analyst writeup for a single squeeze candidate. Load when the user asks to analyze, deep-dive, research, or write up a specific ticker. Offloads narrative prose to OpenRouter free models while Claude handles the structured reasoning, data stitching, and invalidation logic.
+description: Structured analyst writeup for a single squeeze candidate. Load when the user asks to analyze, deep-dive, research, or write up a specific ticker. Offloads narrative prose to Claude Haiku 4.5 via OpenRouter (paid, ~$0.004/call, 30-min cached) while Claude (this agent) handles the structured reasoning, data stitching, and invalidation logic.
 ---
 
 # Ticker Deepdive — analyst writeup
@@ -18,21 +18,18 @@ User says: "deep dive on TICKER", "analyze TICKER", "write up TICKER", "what's t
 | 5. Review narrative for factual drift | Claude | Cheap models hallucinate — verify against facts block |
 | 6. Format final writeup | Claude | Keeps output discipline |
 
-**OpenRouter models to use (free tier, check availability before call):**
-- `meta-llama/llama-3.3-70b-instruct:free` — default
-- `google/gemini-2.0-flash-exp:free` — fallback, faster
-- `deepseek/deepseek-r1:free` — for multi-step reasoning sections
+**OpenRouter model — paid, single source of truth:**
+- `anthropic/claude-haiku-4.5` — primary
+- `anthropic/claude-haiku-4-5` — same model, dash variant in case OR routing ever requires it
 
-Client wrapper: `src/analyst/openrouter.py`. Call signature:
+Approximate cost: $0.004 per narrative (≈600 in / 600 out). Cached 30 min in `_cache` to avoid repeats.
+
+Client wrapper: `src/analyst/openrouter.py::generate_narrative`. Call signature:
 ```python
-narrative = or_client.generate(
-    model="meta-llama/llama-3.3-70b-instruct:free",
-    system=SYSTEM_ANALYST,
-    user=facts_block_json,
-    max_tokens=800,
-)
+narrative = generate_narrative(facts_block(ticker_result))
+# returns {tldr: str, bull: [str,...], bear: [str,...], model_used: str}
 ```
-On hallucination risk (numbers in prose differing from facts block by >1%), re-prompt with explicit "use ONLY numbers from the facts block" instruction. If it fails twice, fall back to Claude-only writeup.
+The wrapper enforces JSON-mode response and validates shape. If Haiku is unreachable or billing fails, the call raises `OpenRouterError` and the endpoint returns 502 — we surface the failure rather than silently falling back to a weaker model.
 
 ## Output template (exact structure)
 ```markdown

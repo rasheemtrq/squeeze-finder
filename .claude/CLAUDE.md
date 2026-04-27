@@ -7,7 +7,7 @@ Find US equities with 2–10x short-squeeze potential, deep-dive the best candid
 - **Never fabricate market data.** If a data call fails, say so and stop — do not infer SI %, float, or options values from "typical" values.
 - **No trade execution.** This agent outputs ideas and analysis. Order entry is out of scope.
 - **Free APIs only** unless the user explicitly adds a paid key. Current free sources: FINRA (SI, bi-monthly), yfinance (price/options/fundamentals), Reddit PRAW, StockTwits public, Finnhub free tier (earnings), openFDA (drug catalysts), SEC EDGAR.
-- **Cheap models for narrative, Claude for reasoning.** Any long-form analyst writeup routes to OpenRouter free models (see `ticker-deepdive`). Claude stays in charge of ranking logic, code, and decisions.
+- **Claude Haiku 4.5 for narrative; Claude (this agent) for reasoning + code.** Long-form analyst writeups route through OpenRouter at `anthropic/claude-haiku-4.5` (paid, ~$0.004/call, 30-min cached). No free-tier fallbacks — fail loudly if billing or routing breaks. See `ticker-deepdive` skill.
 
 ## Ranking thesis (default weights)
 | Factor | Weight | Source |
