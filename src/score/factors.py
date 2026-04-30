@@ -246,10 +246,17 @@ def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, 
     }
 
 
-def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]:
+def score_si(
+    fund: dict | None,
+    finra: dict | None = None,
+    insiders: dict | None = None,
+) -> tuple[float, dict]:
     """
     Combines structural SI (yf: % float, DTC) with FINRA daily short-volume
-    momentum (trend + latest ratio) for a freshness-aware signal.
+    momentum (trend + latest ratio), and adds an insider-buying contrarian
+    bonus from SEC Form 4. Insider open-market purchases by directors /
+    officers / 10%-owners on a heavily-shorted name is the textbook squeeze
+    precondition: insiders see the borrow + know shorts are wrong.
     """
     if not fund:
         return 0.0, {"reason": "no_data"}
@@ -258,8 +265,10 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
     dtc = fund.get("short_ratio") or 0
     si_date = fund.get("shares_short_date")
 
-    pct_component = 40 * min(si_pct / 0.30, 1) if si_pct else 0
-    dtc_component = 30 * min(dtc / 10, 1) if dtc else 0
+    # Rebalanced from (40, 30, 30) to (35, 25, 25, 15) so insider-buying can
+    # contribute up to 15 pts.
+    pct_component = 35 * min(si_pct / 0.30, 1) if si_pct else 0
+    dtc_component = 25 * min(dtc / 10, 1) if dtc else 0
 
     finra_component = 0
     finra_info: dict = {}
@@ -274,14 +283,41 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
             "finra_latest_date": finra.get("latest_date"),
         }
         # high short-vol ratio (>40% of daily volume sold short) = active pressure
-        finra_component = 30 * min(max(latest - 0.30, 0) / 0.30, 1)
+        finra_component = 25 * min(max(latest - 0.30, 0) / 0.30, 1)
         if trend == "rising":
-            finra_component += 5
+            finra_component += 4
         elif trend == "falling":
-            finra_component -= 5
-        finra_component = max(0, min(30, finra_component))
+            finra_component -= 4
+        finra_component = max(0, min(25, finra_component))
 
-    score = _clip(pct_component + dtc_component + finra_component)
+    # Insider open-market buying — contrarian bullish, scaled by total $ value
+    # and amplified for cluster buying (3+ insiders within 14d).
+    insider_component = 0.0
+    insider_info: dict = {}
+    if insiders:
+        total_value = insiders.get("total_buy_value_usd") or 0
+        distinct = insiders.get("distinct_insiders") or 0
+        cluster = bool(insiders.get("cluster_buying"))
+        insider_info = {
+            "insider_buy_value_usd": total_value,
+            "insider_distinct_buyers": distinct,
+            "insider_cluster": cluster,
+        }
+        # $250k = 5 pts, $1M = 10 pts, $5M+ = full 15.
+        if total_value >= 250_000:
+            insider_component = _clip(
+                5 + math.log10(max(total_value / 250_000, 1)) * 7,
+                0,
+                15,
+            )
+        if cluster:
+            insider_component = max(insider_component, 12)
+        # Without high SI, insider buying alone shouldn't carry the factor —
+        # scale by the structural SI signal so it amplifies rather than substitutes.
+        si_amplifier = min(1.0, max(si_pct, 0) / 0.10) if si_pct else 0.3
+        insider_component *= si_amplifier
+
+    score = _clip(pct_component + dtc_component + finra_component + insider_component)
 
     stale = False
     si_age_days: int | None = None
@@ -309,6 +345,12 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
         flag = "extreme_si"
     if finra_info and finra_info.get("finra_latest_short_ratio", 0) >= 0.50 and finra_info.get("finra_trend") == "rising":
         flag = "shorts_piling_in"
+    # Insider cluster buying on a high-SI name is the strongest standalone
+    # signal here — promote the flag.
+    if insider_info.get("insider_cluster") and si_pct and si_pct >= 0.15:
+        flag = "insider_cluster_buying"
+    elif (insider_info.get("insider_buy_value_usd") or 0) >= 1_000_000 and si_pct and si_pct >= 0.15:
+        flag = "insider_buying"
     if si_age_days is not None and si_age_days > 30 and not finra_info:
         flag = "si_stale"
     elif stale and not finra_info:
@@ -320,6 +362,7 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
         "si_as_of_epoch": si_date,
         "stale_yf": stale,
         **finra_info,
+        **insider_info,
         "flag": flag,
     }
 
@@ -418,7 +461,9 @@ def compute_all(bundle: dict[str, Any]) -> dict[str, Any]:
     """
     s_sent, sig_sent = score_sentiment(bundle.get("stocktwits"), bundle.get("apewisdom"))
     s_opt, sig_opt = score_options(bundle.get("options"), bundle.get("prices"))
-    s_si, sig_si = score_si(bundle.get("fundamentals"), bundle.get("finra"))
+    s_si, sig_si = score_si(
+        bundle.get("fundamentals"), bundle.get("finra"), bundle.get("insiders")
+    )
     s_ta, sig_ta = score_ta(bundle.get("prices"))
     s_cat, sig_cat = score_catalyst(bundle.get("catalysts"))
 

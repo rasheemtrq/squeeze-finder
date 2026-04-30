@@ -7,7 +7,17 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
-from src.data import _cache, apewisdom, catalysts, finra, fundamentals, options, prices, stocktwits
+from src.data import (
+    _cache,
+    apewisdom,
+    catalysts,
+    finra,
+    fundamentals,
+    insiders,
+    options,
+    prices,
+    stocktwits,
+)
 from src.data import universe as universe_builder
 from src.data.prices import DataUnavailable
 from src.score.backtest import record_snapshot
@@ -31,6 +41,7 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
         "catalysts": lambda: catalysts.fetch(ticker),
         "finra": lambda: finra.fetch(ticker),
         "apewisdom": lambda: apewisdom.fetch(ticker),
+        "insiders": lambda: insiders.fetch(ticker),
     }
     for name, fn in sources.items():
         try:
