@@ -60,12 +60,22 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
             near_atm_call_oi = int(calls.loc[near_mask, "openInterest"].fillna(0).sum())
             total_oi = int(calls["openInterest"].fillna(0).sum() + puts["openInterest"].fillna(0).sum())
 
-            # ATM IV per side — strike closest to spot, only if IV looks real
-            # (yfinance returns 1e-5 for illiquid strikes which would skew skew)
+            # Detect stale chain (pre/post-market): yfinance returns bid=ask=0
+            # on every strike AND a constant sentinel IV (~6%). If we extract
+            # ATM IV from this, skew always reads 1.0 and IV/HV always reads
+            # tiny — both meaningless. Skip IV extraction entirely.
+            calls_bidask_zero = ((calls["bid"].fillna(0) + calls["ask"].fillna(0)) == 0).all()
+            puts_bidask_zero = ((puts["bid"].fillna(0) + puts["ask"].fillna(0)) == 0).all()
+            if calls_bidask_zero and puts_bidask_zero:
+                continue
+
+            # ATM IV per side — strike closest to spot, only from strikes that
+            # are quoting (bid+ask > 0) AND have a non-sentinel IV.
             for side_df, side_name in ((calls, "call"), (puts, "put")):
                 if side_df is None or side_df.empty:
                     continue
-                liq = side_df.loc[side_df["impliedVolatility"].fillna(0) >= 0.05].copy()
+                quoting = (side_df["bid"].fillna(0) + side_df["ask"].fillna(0)) > 0
+                liq = side_df.loc[quoting & (side_df["impliedVolatility"].fillna(0) >= 0.05)].copy()
                 if liq.empty:
                     continue
                 liq["abs_dist"] = (liq["strike"] - spot).abs()
