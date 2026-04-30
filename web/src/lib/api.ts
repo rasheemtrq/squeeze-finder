@@ -186,6 +186,57 @@ export function fetchOptions(symbol: string, top: number = 8): Promise<OptionsRe
   return jsonFetch<OptionsRec>(`/api/ticker/${symbol.toUpperCase()}/options?top=${top}`);
 }
 
+export type ZeroDteContract = {
+  ticker: string;
+  side: "call" | "put";
+  strike: number;
+  expiry: string;
+  bid: number;
+  ask: number;
+  mid: number;
+  spread_pct: number | null;
+  volume: number;
+  open_interest: number;
+  iv: number;
+  delta: number;
+  cost_per_contract: number;
+  breakeven: number;
+  pct_otm: number;
+  expected_move_dollars: number;
+  expected_move_pct: number | null;
+  p_2x: number;
+  p_5x: number;
+  p_10x: number;
+  score: number;
+};
+
+export type ZeroDteTickerResult = {
+  ticker: string;
+  spot: number;
+  expiry: string;
+  as_of: string;
+  chain_stale: boolean;
+  hours_until_close: number;
+  calls: ZeroDteContract[];
+  puts: ZeroDteContract[];
+  candidates_scored: number;
+};
+
+export type ZeroDteScreen = {
+  as_of: string;
+  ok: boolean;
+  blocked_reason: "closed" | "pre_open" | "auction_noise" | "theta_cliff" | null;
+  expiry?: string;
+  universe: string[];
+  errors?: Record<string, string>;
+  filters?: Record<string, number | number[]>;
+  results: ZeroDteTickerResult[];
+};
+
+export function fetchZeroDte(top_per_side: number = 3): Promise<ZeroDteScreen> {
+  return jsonFetch<ZeroDteScreen>(`/api/zero-dte?top_per_side=${top_per_side}`);
+}
+
 export function fetchIdeas(status?: Idea["status"]): Promise<{ count: number; ideas: Idea[] }> {
   const qs = status ? `?status=${status}` : "";
   return jsonFetch(`/api/ideas${qs}`);

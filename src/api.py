@@ -27,6 +27,7 @@ from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
 from src.data import _cache, prices
 from src.data.prices import DataUnavailable
 from src.options.recommender import recommend as recommend_options
+from src.options.zero_dte_scorer import screen_universe as screen_zero_dte
 from src.scanner import scan, score_ticker
 
 NARRATIVE_CACHE_TTL = 1800
@@ -143,6 +144,19 @@ def narrative_endpoint(symbol: str) -> dict:
 @app.get("/api/universe")
 def universe_endpoint() -> dict:
     return {"tickers": DEFAULT_UNIVERSE, "count": len(DEFAULT_UNIVERSE)}
+
+
+@app.get("/api/zero-dte")
+def zero_dte_endpoint(top_per_side: int = Query(3, ge=1, le=10), refresh: bool = False) -> dict:
+    """Same-day-expiry options ranked by 2x/5x/10x payoff probability.
+
+    Restricted to mega-caps + major-index ETFs and gated to RTH 9:45a–3:30p ET.
+    Outside that window, returns ok=false with a blocked_reason.
+    """
+    try:
+        return screen_zero_dte(top_per_side=top_per_side, force_refresh=refresh)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"zero-dte screen failed: {e}") from e
 
 
 @app.get("/api/ticker/{symbol}/options")

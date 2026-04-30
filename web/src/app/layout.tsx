@@ -38,6 +38,7 @@ export default function RootLayout({
             </Link>
             <nav className="flex items-center gap-6 text-sm text-[var(--muted)]">
               <Link href="/" className="hover:text-white transition-colors">scan</Link>
+              <Link href="/0dte" className="hover:text-white transition-colors">0dte</Link>
               <Link href="/ideas" className="hover:text-white transition-colors">ideas</Link>
               <a
                 href="http://127.0.0.1:8000/docs"
