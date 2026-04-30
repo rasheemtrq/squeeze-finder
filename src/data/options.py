@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import yfinance as yf
 
@@ -42,6 +42,8 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
     nearest_expiry = expiries[0]
     atm_call_iv: float | None = None
     atm_put_iv: float | None = None
+    unusual_call_strikes: list[dict] = []
+    unusual_put_strikes: list[dict] = []
 
     for exp in expiries[:max_expiries]:
         try:
@@ -59,6 +61,31 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
             near_mask = (calls["strike"] >= spot * 0.95) & (calls["strike"] <= spot * 1.10)
             near_atm_call_oi = int(calls.loc[near_mask, "openInterest"].fillna(0).sum())
             total_oi = int(calls["openInterest"].fillna(0).sum() + puts["openInterest"].fillna(0).sum())
+
+            # Unusual volume per strike — "smart-money flow" signature.
+            # A strike where today's volume >= 2x prior OI AND >= 500 contracts
+            # is a strong tell that someone is opening (not closing) a
+            # meaningful position. Restrict to strikes within ±25% of spot —
+            # far-OTM lottery tickets with vol/OI > 2 happen all day on
+            # liquid names and aren't informative.
+            for side_df, bucket in ((calls, unusual_call_strikes), (puts, unusual_put_strikes)):
+                if side_df is None or side_df.empty:
+                    continue
+                v = side_df["volume"].fillna(0)
+                oi = side_df["openInterest"].fillna(0)
+                strike = side_df["strike"]
+                price = side_df["lastPrice"].fillna(0)
+                near_money = (strike >= spot * 0.75) & (strike <= spot * 1.25)
+                unusual = (v >= 500) & (v >= 2 * oi.clip(lower=1)) & near_money
+                for _, row in side_df.loc[unusual].iterrows():
+                    bucket.append({
+                        "strike": float(row["strike"]),
+                        "volume": int(row["volume"] or 0),
+                        "open_interest": int(row["openInterest"] or 0),
+                        "last_price": float(row["lastPrice"] or 0),
+                        "premium_usd": round(float(row["volume"] or 0) * float(price.loc[row.name]) * 100, 2),
+                        "vol_oi_ratio": round(float(row["volume"] or 0) / max(float(row["openInterest"] or 1), 1), 2),
+                    })
 
             # Detect stale chain (pre/post-market): yfinance returns bid=ask=0
             # on every strike AND a constant sentinel IV (~6%). If we extract
@@ -93,8 +120,8 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
                 else:
                     atm_put_iv = iv
 
-    exp_dt = datetime.strptime(nearest_expiry, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    days_to_expiry = (exp_dt - datetime.now(timezone.utc)).days
+    exp_dt = datetime.strptime(nearest_expiry, "%Y-%m-%d").replace(tzinfo=UTC)
+    days_to_expiry = (exp_dt - datetime.now(UTC)).days
 
     cpr = (call_vol_total / put_vol_total) if put_vol_total > 0 else 0
     gamma_conc = (near_atm_call_oi / total_oi) if total_oi > 0 else 0
@@ -110,9 +137,14 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
     elif atm_put_iv:
         atm_iv_avg = atm_put_iv
 
+    unusual_call_strikes.sort(key=lambda c: c["premium_usd"], reverse=True)
+    unusual_put_strikes.sort(key=lambda c: c["premium_usd"], reverse=True)
+    unusual_call_premium = round(sum(c["premium_usd"] for c in unusual_call_strikes), 2)
+    unusual_put_premium = round(sum(c["premium_usd"] for c in unusual_put_strikes), 2)
+
     result = {
         "ticker": ticker,
-        "as_of": datetime.now(timezone.utc).isoformat(),
+        "as_of": datetime.now(UTC).isoformat(),
         "spot": float(spot),
         "nearest_expiry": nearest_expiry,
         "days_to_expiry": days_to_expiry,
@@ -127,6 +159,12 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
         "atm_put_iv": round(atm_put_iv, 4) if atm_put_iv else None,
         "iv_skew_ratio": round(iv_skew_ratio, 3) if iv_skew_ratio else None,
         "atm_iv_avg": round(atm_iv_avg, 4) if atm_iv_avg else None,
+        "unusual_call_strikes_n": len(unusual_call_strikes),
+        "unusual_put_strikes_n": len(unusual_put_strikes),
+        "unusual_call_premium_usd": unusual_call_premium,
+        "unusual_put_premium_usd": unusual_put_premium,
+        "unusual_call_top": unusual_call_strikes[:5],
+        "unusual_put_top": unusual_put_strikes[:5],
         "num_expiries_sampled": min(max_expiries, len(expiries)),
     }
     _cache.put("options", ticker, result)

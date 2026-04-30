@@ -6,7 +6,7 @@ the UI factor breakdown and the `ticker-deepdive` output.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -181,10 +181,10 @@ def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, 
     iv_skew = opt.get("iv_skew_ratio")
     atm_iv = opt.get("atm_iv_avg")
 
-    # Five components (rebalanced from three): CPR 30, gamma 30, DTE 15,
-    # IV-skew 15, IV/HV 10. Total raw cap 100.
-    cpr_component = _clip(15 * math.log2(max(cpr, 0.25)) + 15, 0, 30) if cpr > 0 else 0
-    gamma_component = _clip(gamma * 75, 0, 30)
+    # Six components: CPR 25, gamma 25, DTE 15, IV-skew 15, IV/HV 10,
+    # unusual-volume 10. Total raw cap 100.
+    cpr_component = _clip(12 * math.log2(max(cpr, 0.25)) + 12, 0, 25) if cpr > 0 else 0
+    gamma_component = _clip(gamma * 65, 0, 25)
     dte_component = 15 if dte <= 14 else (8 if dte <= 30 else 0)
 
     # IV skew — calls bid up vs puts is bullish positioning. Ratio of 1.0 is
@@ -203,8 +203,26 @@ def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, 
         if iv_hv_ratio > 1.5:
             iv_hv_component = _clip((iv_hv_ratio - 1.5) / 1.5 * 10, 0, 10)
 
+    # Unusual options volume — strikes where today's volume >= 2x OI on
+    # near-money strikes, indicating new positions opened. Net call vs put
+    # premium tells direction; we score the bullish side (call premium > put).
+    unusual_call_n = opt.get("unusual_call_strikes_n") or 0
+    unusual_put_n = opt.get("unusual_put_strikes_n") or 0
+    unusual_call_prem = opt.get("unusual_call_premium_usd") or 0
+    unusual_put_prem = opt.get("unusual_put_premium_usd") or 0
+    net_unusual_premium = unusual_call_prem - unusual_put_prem
+    unusual_component = 0.0
+    if unusual_call_n >= 1 and net_unusual_premium > 0:
+        # Scale: $100k net call premium = 4 pts, $1M = 8 pts, $5M+ = full 10.
+        unusual_component = _clip(
+            math.log10(max(net_unusual_premium / 100_000, 1)) * 5 + 2,
+            0,
+            10,
+        )
+
     raw = _clip(
-        cpr_component + gamma_component + dte_component + iv_skew_component + iv_hv_component
+        cpr_component + gamma_component + dte_component
+        + iv_skew_component + iv_hv_component + unusual_component
     )
 
     # Liquidity scaling — chains with thin OI shouldn't be able to fully carry
@@ -215,6 +233,8 @@ def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, 
     flag = None
     if total_oi < 500:
         flag = "untradable_chain"
+    elif unusual_call_n >= 3 and net_unusual_premium >= 1_000_000:
+        flag = "smart_call_flow"
     elif iv_skew and iv_skew >= 1.10 and gamma >= 0.3:
         flag = "call_skew"
     elif iv_hv_ratio and iv_hv_ratio >= 2.0 and dte <= 30:
@@ -241,6 +261,11 @@ def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, 
         "atm_iv_avg": atm_iv,
         "hv_20d": round(hv, 4) if hv else None,
         "iv_hv_ratio": round(iv_hv_ratio, 3) if iv_hv_ratio else None,
+        "unusual_call_n": unusual_call_n,
+        "unusual_put_n": unusual_put_n,
+        "unusual_call_premium_usd": unusual_call_prem,
+        "unusual_put_premium_usd": unusual_put_prem,
+        "net_unusual_premium_usd": round(net_unusual_premium, 2),
         "liquidity_mult": round(liquidity_mult, 3),
         "flag": flag,
     }
@@ -323,9 +348,9 @@ def score_si(
     si_age_days: int | None = None
     if si_date:
         try:
-            dt = datetime.fromtimestamp(si_date, tz=timezone.utc) if isinstance(si_date, (int, float)) else None
+            dt = datetime.fromtimestamp(si_date, tz=UTC) if isinstance(si_date, (int, float)) else None
             if dt:
-                si_age_days = (datetime.now(timezone.utc) - dt).days
+                si_age_days = (datetime.now(UTC) - dt).days
                 if si_age_days > 20:
                     stale = True
                     if not finra_info:
@@ -439,17 +464,44 @@ def score_catalyst(cat: dict | None) -> tuple[float, dict]:
     if dte is None:
         return 0.0, {"reason": "no_event"}
 
-    score = 100 * max(0, 1 - dte / 30)
+    next_event = cat.get("next_event") or {}
+    kind = (next_event.get("kind") or "earnings").lower()
+
+    # Event-type-aware scoring. Linear decay was too generic — a binary FDA
+    # PDUFA date doesn't lose value the same way a quarterly print does.
+    if kind in ("fda_pdufa", "fda"):
+        # Binary event (drug approval / rejection). Full score plateau
+        # within 30 days; the squeeze potential is the same whether it's
+        # in 5 or 25 days because the outcome is the actual catalyst.
+        score = 100.0 if dte <= 30 else 0.0
+    elif kind in ("m&a", "ma", "merger", "acquisition"):
+        # Pending merger/acquisition — strong baseline at any reasonable DTE
+        # because shorts are typically squeezed by the announcement premium.
+        score = 90.0 if dte <= 60 else 50.0 if dte <= 120 else 0.0
+    elif kind in ("regulatory", "ruling"):
+        score = max(0.0, 80.0 - dte * 2.0)
+    else:
+        # Earnings (default). Linear decay 0-30d, with two refinements:
+        #  - small boost (×1.1) for very-near events (≤3d) where gamma
+        #    chase accelerates into the print
+        #  - small boost (+5) for AMC (after-market-close) earnings since
+        #    the overnight gap is typically wider than BMO
+        score = 100.0 * max(0.0, 1.0 - dte / 30.0)
+        if dte <= 3 and score > 0:
+            score *= 1.1
+        if next_event.get("hour", "").lower() == "amc":
+            score = min(100.0, score + 5.0)
 
     flag = None
     if dte <= 7:
-        flag = "imminent"
+        flag = f"{kind}_imminent" if kind != "earnings" else "imminent"
     elif dte <= 14:
-        flag = "near"
+        flag = f"{kind}_near" if kind != "earnings" else "near"
 
     return _clip(score), {
-        "next_event": cat.get("next_event"),
+        "next_event": next_event,
         "days_to_event": dte,
+        "kind": kind,
         "flag": flag,
     }
 

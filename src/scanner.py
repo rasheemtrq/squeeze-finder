@@ -18,6 +18,9 @@ from src.data import (
     prices,
     stocktwits,
 )
+from src.data import (
+    regime as regime_data,
+)
 from src.data import universe as universe_builder
 from src.data.prices import DataUnavailable
 from src.score.backtest import record_snapshot
@@ -120,6 +123,15 @@ def scan(
             cached["cached"] = True
             return cached
 
+    # One regime read per scan, applied to every ticker as a multiplier on
+    # the composite. Soft-fail: in risk-off we want to *down-weight* the
+    # whole scan, but if the regime fetcher itself fails we run as risk_on.
+    regime: dict[str, Any]
+    try:
+        regime = regime_data.fetch()
+    except Exception as e:
+        regime = {"regime": "unknown", "multiplier": 1.0, "error": str(e)}
+
     results = []
     errors = []
 
@@ -136,6 +148,13 @@ def scan(
             except Exception as e:
                 errors.append({"ticker": t, "reason": f"scan_error: {e}"})
 
+    # Apply regime multiplier — squeezes don't survive risk-off.
+    regime_mult = regime.get("multiplier", 1.0)
+    if regime_mult != 1.0:
+        for r in results:
+            r["score_pre_regime"] = r["score"]
+            r["score"] = round(r["score"] * regime_mult, 1)
+
     results.sort(key=lambda r: r["score"], reverse=True)
     filtered = [r for r in results if r["score"] >= min_score][:limit]
 
@@ -146,6 +165,7 @@ def scan(
         "scored": len(results),
         "returned": len(filtered),
         "weights": weights,
+        "regime": regime,
         "min_score": min_score,
         "results": filtered,
         "excluded": errors,
