@@ -69,13 +69,20 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
             if calls_bidask_zero and puts_bidask_zero:
                 continue
 
-            # ATM IV per side — strike closest to spot, only from strikes that
-            # are quoting (bid+ask > 0) AND have a non-sentinel IV.
+            # ATM IV per side — strike closest to spot among strikes that are
+            # quoting (bid+ask > 0), within ±10% of spot, and IV in a
+            # plausible range. Pre-market chains often surface only a few
+            # far-OTM strikes with $0.01 quotes that produce 1800% IVs;
+            # the spot-proximity gate filters those out.
             for side_df, side_name in ((calls, "call"), (puts, "put")):
                 if side_df is None or side_df.empty:
                     continue
                 quoting = (side_df["bid"].fillna(0) + side_df["ask"].fillna(0)) > 0
-                liq = side_df.loc[quoting & (side_df["impliedVolatility"].fillna(0) >= 0.05)].copy()
+                near = (side_df["strike"] >= spot * 0.90) & (side_df["strike"] <= spot * 1.10)
+                iv_real = (side_df["impliedVolatility"].fillna(0) >= 0.05) & (
+                    side_df["impliedVolatility"].fillna(0) <= 5.0
+                )
+                liq = side_df.loc[quoting & near & iv_real].copy()
                 if liq.empty:
                     continue
                 liq["abs_dist"] = (liq["strike"] - spot).abs()
