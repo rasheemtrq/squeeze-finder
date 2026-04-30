@@ -33,8 +33,12 @@ def is_red_flag(bundle: dict) -> tuple[bool, str | None]:
             return True, "illiquid"
 
     bars = prices.get("bars") or []
-    if len(bars) >= 5:
-        five_day_return = (bars[-1]["close"] / bars[-6]["close"]) - 1 if len(bars) > 5 else 0
+    if len(bars) > 60:
+        sixty_day_return = (bars[-1]["close"] / bars[-61]["close"]) - 1
+        if sixty_day_return > 2.0:
+            return False, "post_blowoff"  # demote, not exclude
+    if len(bars) > 5:
+        five_day_return = (bars[-1]["close"] / bars[-6]["close"]) - 1
         if five_day_return > 0.50:
             return False, "late_party"  # demote, not exclude
 

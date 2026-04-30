@@ -19,6 +19,8 @@ def _score_stocktwits(st: dict) -> tuple[float, dict]:
     bull = st["bull_ratio"]
     classified = st["bullish"] + st["bearish"]
     lookback = st.get("lookback_hours", 0)
+    velocity = st.get("msg_velocity")
+    bull_baseline = st.get("bull_ratio_baseline")
 
     base = {
         "st_n": n,
@@ -26,6 +28,8 @@ def _score_stocktwits(st: dict) -> tuple[float, dict]:
         "st_bullish": st["bullish"],
         "st_bearish": st["bearish"],
         "st_lookback_hours": lookback,
+        "st_msg_velocity": velocity,
+        "st_bull_baseline": bull_baseline,
     }
 
     if n < 20 or classified < 10:
@@ -34,10 +38,30 @@ def _score_stocktwits(st: dict) -> tuple[float, dict]:
     volume_score = _clip(math.log2(max(n, 1) / 10) * 12, 0, 40)
     ratio_score = (bull - 0.5) * 80
     activity_bonus = 20 if n >= 100 else (10 if n >= 50 else 0)
-    score = _clip(volume_score + ratio_score + activity_bonus + 20, 0, 100)
+
+    # Velocity bonus mirrors WSB: 2x baseline → +15, 3x → +25, capped 25.
+    # Penalize a clear fade (≤0.5x baseline) by –10. Bullish drift (current bull
+    # ratio meaningfully above its 7d baseline) adds another small bump.
+    velocity_bonus = 0
+    if velocity is not None:
+        if velocity > 1:
+            velocity_bonus = min(25, (velocity - 1) * 12)
+        elif velocity < 0.5:
+            velocity_bonus = -10
+    bull_drift_bonus = 0
+    if bull_baseline is not None and bull - bull_baseline >= 0.10 and n >= 30:
+        bull_drift_bonus = 8
+
+    score = _clip(
+        volume_score + ratio_score + activity_bonus + velocity_bonus + bull_drift_bonus + 20,
+        0,
+        100,
+    )
 
     st_flag = None
-    if n >= 50 and bull >= 0.70:
+    if velocity is not None and velocity >= 2 and bull >= 0.60:
+        st_flag = "velocity_surge"
+    elif n >= 50 and bull >= 0.70:
         st_flag = "hot"
     elif bull <= 0.35:
         st_flag = "bearish_crowd"
@@ -114,8 +138,10 @@ def score_sentiment(st: dict | None, wsb: dict | None = None) -> tuple[float, di
     flag = None
     st_flag = st_signals.get("st_flag")
     wsb_flag = wsb_signals.get("wsb_flag")
-    if st_flag == "hot" and wsb_flag in ("wsb_surge", "wsb_top20", "wsb_accelerating"):
+    if st_flag in ("hot", "velocity_surge") and wsb_flag in ("wsb_surge", "wsb_top20", "wsb_accelerating"):
         flag = "convergent_bullish"
+    elif st_flag == "velocity_surge":
+        flag = "velocity_surge"
     elif wsb_flag == "wsb_surge":
         flag = "wsb_surge"
     elif st_flag == "hot":
@@ -135,18 +161,26 @@ def score_options(opt: dict | None) -> tuple[float, dict]:
     dte = opt["days_to_expiry"] or 99
     call_oi = opt["call_oi"]
     put_oi = opt["put_oi"]
+    total_oi = (call_oi or 0) + (put_oi or 0)
 
     cpr_component = _clip(20 * math.log2(max(cpr, 0.25)) + 20, 0, 40) if cpr > 0 else 0
     gamma_component = _clip(gamma * 100, 0, 40)
     dte_component = 20 if dte <= 14 else (10 if dte <= 30 else 0)
-    score = _clip(cpr_component + gamma_component + dte_component)
+    raw = _clip(cpr_component + gamma_component + dte_component)
+
+    # Liquidity scaling — chains with thin OI shouldn't be able to fully carry
+    # the factor. Linear ramp: at 0 OI score is 0; at 5000+ OI it's unaffected.
+    liquidity_mult = min(1.0, total_oi / 5000) if total_oi > 0 else 0.0
+    score = _clip(raw * liquidity_mult)
 
     flag = None
-    if gamma >= 0.4 and dte <= 14:
+    if total_oi < 500:
+        flag = "untradable_chain"
+    elif gamma >= 0.4 and dte <= 14:
         flag = "gamma_setup"
     elif cpr >= 3:
         flag = "call_heavy"
-    elif call_oi + put_oi < 1000:
+    elif total_oi < 1000:
         flag = "thin_options"
 
     return score, {
@@ -155,6 +189,8 @@ def score_options(opt: dict | None) -> tuple[float, dict]:
         "days_to_expiry": dte,
         "call_oi": call_oi,
         "put_oi": put_oi,
+        "total_oi": total_oi,
+        "liquidity_mult": round(liquidity_mult, 3),
         "flag": flag,
     }
 
@@ -197,15 +233,21 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
     score = _clip(pct_component + dtc_component + finra_component)
 
     stale = False
+    si_age_days: int | None = None
     if si_date:
         try:
             dt = datetime.fromtimestamp(si_date, tz=timezone.utc) if isinstance(si_date, (int, float)) else None
             if dt:
-                age_days = (datetime.now(timezone.utc) - dt).days
-                if age_days > 20:
+                si_age_days = (datetime.now(timezone.utc) - dt).days
+                if si_age_days > 20:
                     stale = True
                     if not finra_info:
                         score = min(score, 50)
+                # Hard zero past 30d with no FINRA backstop: the structural number
+                # is too old to act on and we have no daily-volume signal to
+                # corroborate. Better to drop the factor than mislead the rank.
+                if si_age_days > 30 and not finra_info:
+                    score = 0.0
         except Exception:
             pass
 
@@ -216,7 +258,9 @@ def score_si(fund: dict | None, finra: dict | None = None) -> tuple[float, dict]
         flag = "extreme_si"
     if finra_info and finra_info.get("finra_latest_short_ratio", 0) >= 0.50 and finra_info.get("finra_trend") == "rising":
         flag = "shorts_piling_in"
-    if stale and not finra_info:
+    if si_age_days is not None and si_age_days > 30 and not finra_info:
+        flag = "si_stale"
+    elif stale and not finra_info:
         flag = f"{flag or ''}_STALE".lstrip("_")
 
     return score, {
@@ -242,8 +286,11 @@ def score_ta(prices: dict | None) -> tuple[float, dict]:
     volumes = [b["volume"] for b in bars]
 
     last_close = closes[-1]
+    prior_close = closes[-2]
     prior_high_60 = max(highs[-61:-1])
-    breakout = 1 if last_close > prior_high_60 else 0
+    # Require close above the prior 60d high AND a green day. Filters out
+    # intraday wicks that round-trip below the breakout level.
+    breakout = 1 if (last_close > prior_high_60 and last_close > prior_close) else 0
 
     vol_20_avg = sum(volumes[-21:-1]) / 20
     rvol = volumes[-1] / vol_20_avg if vol_20_avg > 0 else 0

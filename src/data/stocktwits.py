@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from curl_cffi import requests as curl_requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.config import CACHE_TTL
+from src.config import CACHE_DIR, CACHE_TTL
 from src.data import _cache
 from src.data.prices import DataUnavailable
 
 URL = "https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
 MAX_PAGES = 3
 MAX_LOOKBACK_HOURS = 24
+HISTORY_DIR = CACHE_DIR / "stocktwits_history"
+HISTORY_RETAIN_DAYS = 14
+HISTORY_BASELINE_DAYS = 7
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
@@ -102,6 +107,10 @@ def fetch(ticker: str, force_refresh: bool = False) -> dict:
         oldest = min(m["ts"] for m in messages)
         lookback_hours = (newest - oldest).total_seconds() / 3600
 
+    velocity, bull_baseline = _update_history(
+        ticker, n_now=n, bull_now=bull_ratio
+    )
+
     result = {
         "ticker": ticker,
         "as_of": datetime.now(timezone.utc).isoformat(),
@@ -112,6 +121,51 @@ def fetch(ticker: str, force_refresh: bool = False) -> dict:
         "bull_ratio": round(bull_ratio, 3),
         "lookback_hours": round(lookback_hours, 1),
         "pages_fetched": pages_fetched,
+        "msg_velocity": velocity,
+        "bull_ratio_baseline": bull_baseline,
     }
     _cache.put("stocktwits", ticker, result)
     return result
+
+
+def _update_history(ticker: str, n_now: int, bull_now: float) -> tuple[float | None, float | None]:
+    """Append current sample to the per-ticker history log and compute velocity.
+
+    velocity = current messages_sampled / mean of prior 7d samples; None if no
+    prior history. bull_ratio_baseline is the prior 7d mean.
+    Trims rows older than HISTORY_RETAIN_DAYS to keep files small.
+    """
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    path: Path = HISTORY_DIR / f"{ticker.upper()}.jsonl"
+
+    now = datetime.now(timezone.utc)
+    cutoff_retain = now - timedelta(days=HISTORY_RETAIN_DAYS)
+    cutoff_baseline = now - timedelta(days=HISTORY_BASELINE_DAYS)
+
+    rows: list[dict] = []
+    if path.exists():
+        for line in path.read_text().splitlines():
+            try:
+                row = json.loads(line)
+                ts = datetime.fromisoformat(row["ts"])
+                if ts >= cutoff_retain:
+                    rows.append({"ts": ts, "n": row["n"], "bull": row["bull"]})
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+
+    # Use rows from the prior baseline window as denominator (excludes today)
+    prior = [r for r in rows if r["ts"] >= cutoff_baseline]
+    velocity: float | None = None
+    bull_baseline: float | None = None
+    if prior:
+        avg_n = sum(r["n"] for r in prior) / len(prior)
+        if avg_n > 0:
+            velocity = round(n_now / avg_n, 3)
+        bull_baseline = round(sum(r["bull"] for r in prior) / len(prior), 3)
+
+    rows.append({"ts": now, "n": n_now, "bull": bull_now})
+    with path.open("w") as f:
+        for r in rows:
+            f.write(json.dumps({"ts": r["ts"].isoformat(), "n": r["n"], "bull": r["bull"]}) + "\n")
+
+    return velocity, bull_baseline

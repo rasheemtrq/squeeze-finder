@@ -3,12 +3,14 @@ from __future__ import annotations
 import concurrent.futures
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
 from src.data import _cache, apewisdom, catalysts, finra, fundamentals, options, prices, stocktwits
+from src.data import universe as universe_builder
 from src.data.prices import DataUnavailable
+from src.score.backtest import record_snapshot
 from src.score.composite import collect_flags, composite, is_red_flag
 from src.score.factors import compute_all
 
@@ -53,6 +55,8 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         flags.append(f"risk:{red_flag}")
         if red_flag == "late_party":
             score = max(0, score - 30)
+        elif red_flag == "post_blowoff":
+            score = max(0, score - 25)
 
     fund = bundle.get("fundamentals") or {}
     prices_data = bundle.get("prices") or {}
@@ -67,7 +71,7 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         "flags": flags,
         "excluded": excluded,
         "exclude_reason": red_flag if excluded else None,
-        "as_of": datetime.now(timezone.utc).isoformat(),
+        "as_of": datetime.now(UTC).isoformat(),
         "errors": bundle.get("errors", {}),
     }
 
@@ -79,8 +83,18 @@ def scan(
     min_score: float = 0,
     limit: int = 20,
     force_refresh: bool = False,
+    dynamic_universe: bool = True,
 ) -> dict[str, Any]:
-    universe = tickers or DEFAULT_UNIVERSE
+    if tickers:
+        universe = tickers
+        universe_sources: dict[str, list[str]] = {"override": list(tickers)}
+    elif dynamic_universe:
+        built = universe_builder.build(DEFAULT_UNIVERSE)
+        universe = built["tickers"]
+        universe_sources = built["sources"]
+    else:
+        universe = DEFAULT_UNIVERSE
+        universe_sources = {"core": list(DEFAULT_UNIVERSE)}
     weights = weights or DEFAULT_WEIGHTS
 
     cache_key = hashlib.sha1(
@@ -115,8 +129,9 @@ def scan(
     filtered = [r for r in results if r["score"] >= min_score][:limit]
 
     output = {
-        "as_of": datetime.now(timezone.utc).isoformat(),
+        "as_of": datetime.now(UTC).isoformat(),
         "universe_size": len(universe),
+        "universe_sources": universe_sources,
         "scored": len(results),
         "returned": len(filtered),
         "weights": weights,
@@ -126,4 +141,10 @@ def scan(
         "cached": False,
     }
     _cache.put("scans", cache_key, output)
+
+    try:
+        record_snapshot({**output, "results": results})
+    except Exception:
+        pass
+
     return output
