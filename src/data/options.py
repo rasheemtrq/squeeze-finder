@@ -40,6 +40,8 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
     near_atm_call_oi = 0
     total_oi = 0
     nearest_expiry = expiries[0]
+    atm_call_iv: float | None = None
+    atm_put_iv: float | None = None
 
     for exp in expiries[:max_expiries]:
         try:
@@ -58,11 +60,38 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
             near_atm_call_oi = int(calls.loc[near_mask, "openInterest"].fillna(0).sum())
             total_oi = int(calls["openInterest"].fillna(0).sum() + puts["openInterest"].fillna(0).sum())
 
+            # ATM IV per side — strike closest to spot, only if IV looks real
+            # (yfinance returns 1e-5 for illiquid strikes which would skew skew)
+            for side_df, side_name in ((calls, "call"), (puts, "put")):
+                if side_df is None or side_df.empty:
+                    continue
+                liq = side_df.loc[side_df["impliedVolatility"].fillna(0) >= 0.05].copy()
+                if liq.empty:
+                    continue
+                liq["abs_dist"] = (liq["strike"] - spot).abs()
+                row = liq.loc[liq["abs_dist"].idxmin()]
+                iv = float(row["impliedVolatility"])
+                if side_name == "call":
+                    atm_call_iv = iv
+                else:
+                    atm_put_iv = iv
+
     exp_dt = datetime.strptime(nearest_expiry, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     days_to_expiry = (exp_dt - datetime.now(timezone.utc)).days
 
     cpr = (call_vol_total / put_vol_total) if put_vol_total > 0 else 0
     gamma_conc = (near_atm_call_oi / total_oi) if total_oi > 0 else 0
+
+    iv_skew_ratio: float | None = None
+    if atm_call_iv and atm_put_iv:
+        iv_skew_ratio = atm_call_iv / atm_put_iv
+    atm_iv_avg: float | None = None
+    if atm_call_iv and atm_put_iv:
+        atm_iv_avg = (atm_call_iv + atm_put_iv) / 2
+    elif atm_call_iv:
+        atm_iv_avg = atm_call_iv
+    elif atm_put_iv:
+        atm_iv_avg = atm_put_iv
 
     result = {
         "ticker": ticker,
@@ -77,6 +106,10 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
         "call_put_ratio": round(cpr, 2),
         "near_atm_call_oi": near_atm_call_oi,
         "gamma_concentration": round(gamma_conc, 3),
+        "atm_call_iv": round(atm_call_iv, 4) if atm_call_iv else None,
+        "atm_put_iv": round(atm_put_iv, 4) if atm_put_iv else None,
+        "iv_skew_ratio": round(iv_skew_ratio, 3) if iv_skew_ratio else None,
+        "atm_iv_avg": round(atm_iv_avg, 4) if atm_iv_avg else None,
         "num_expiries_sampled": min(max_expiries, len(expiries)),
     }
     _cache.put("options", ticker, result)

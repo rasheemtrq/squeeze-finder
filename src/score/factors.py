@@ -152,7 +152,23 @@ def score_sentiment(st: dict | None, wsb: dict | None = None) -> tuple[float, di
     return score, {**st_signals, **wsb_signals, "flag": flag}
 
 
-def score_options(opt: dict | None) -> tuple[float, dict]:
+def _realized_vol_annualized(prices: dict | None, lookback: int = 20) -> float | None:
+    """Annualized 20d realized vol from daily log-returns. Returns None if insufficient bars."""
+    if not prices:
+        return None
+    bars = prices.get("bars") or []
+    if len(bars) < lookback + 1:
+        return None
+    closes = [b["close"] for b in bars[-(lookback + 1):]]
+    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes)) if closes[i - 1] > 0]
+    if len(rets) < lookback // 2:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / max(1, len(rets) - 1)
+    return math.sqrt(var) * math.sqrt(252)
+
+
+def score_options(opt: dict | None, prices: dict | None = None) -> tuple[float, dict]:
     if not opt:
         return 0.0, {"reason": "no_data"}
 
@@ -162,11 +178,34 @@ def score_options(opt: dict | None) -> tuple[float, dict]:
     call_oi = opt["call_oi"]
     put_oi = opt["put_oi"]
     total_oi = (call_oi or 0) + (put_oi or 0)
+    iv_skew = opt.get("iv_skew_ratio")
+    atm_iv = opt.get("atm_iv_avg")
 
-    cpr_component = _clip(20 * math.log2(max(cpr, 0.25)) + 20, 0, 40) if cpr > 0 else 0
-    gamma_component = _clip(gamma * 100, 0, 40)
-    dte_component = 20 if dte <= 14 else (10 if dte <= 30 else 0)
-    raw = _clip(cpr_component + gamma_component + dte_component)
+    # Five components (rebalanced from three): CPR 30, gamma 30, DTE 15,
+    # IV-skew 15, IV/HV 10. Total raw cap 100.
+    cpr_component = _clip(15 * math.log2(max(cpr, 0.25)) + 15, 0, 30) if cpr > 0 else 0
+    gamma_component = _clip(gamma * 75, 0, 30)
+    dte_component = 15 if dte <= 14 else (8 if dte <= 30 else 0)
+
+    # IV skew — calls bid up vs puts is bullish positioning. Ratio of 1.0 is
+    # neutral; >1.05 begins to score, peaks at +1.20.
+    iv_skew_component = 0.0
+    if iv_skew and iv_skew > 1.0:
+        iv_skew_component = _clip((iv_skew - 1.0) / 0.20 * 15, 0, 15)
+
+    # IV/HV — when implied vastly exceeds realized, market is pricing a move
+    # (positioning ahead of catalyst). Ratio 1.5 begins to score, peaks at 3.0+.
+    hv = _realized_vol_annualized(prices)
+    iv_hv_ratio: float | None = None
+    iv_hv_component = 0.0
+    if hv and hv > 0 and atm_iv:
+        iv_hv_ratio = atm_iv / hv
+        if iv_hv_ratio > 1.5:
+            iv_hv_component = _clip((iv_hv_ratio - 1.5) / 1.5 * 10, 0, 10)
+
+    raw = _clip(
+        cpr_component + gamma_component + dte_component + iv_skew_component + iv_hv_component
+    )
 
     # Liquidity scaling — chains with thin OI shouldn't be able to fully carry
     # the factor. Linear ramp: at 0 OI score is 0; at 5000+ OI it's unaffected.
@@ -176,10 +215,16 @@ def score_options(opt: dict | None) -> tuple[float, dict]:
     flag = None
     if total_oi < 500:
         flag = "untradable_chain"
+    elif iv_skew and iv_skew >= 1.10 and gamma >= 0.3:
+        flag = "call_skew"
+    elif iv_hv_ratio and iv_hv_ratio >= 2.0 and dte <= 30:
+        flag = "iv_rich"
     elif gamma >= 0.4 and dte <= 14:
         flag = "gamma_setup"
     elif cpr >= 3:
         flag = "call_heavy"
+    elif iv_hv_ratio and iv_hv_ratio < 0.8:
+        flag = "iv_cheap"
     elif total_oi < 1000:
         flag = "thin_options"
 
@@ -190,6 +235,12 @@ def score_options(opt: dict | None) -> tuple[float, dict]:
         "call_oi": call_oi,
         "put_oi": put_oi,
         "total_oi": total_oi,
+        "atm_call_iv": opt.get("atm_call_iv"),
+        "atm_put_iv": opt.get("atm_put_iv"),
+        "iv_skew_ratio": iv_skew,
+        "atm_iv_avg": atm_iv,
+        "hv_20d": round(hv, 4) if hv else None,
+        "iv_hv_ratio": round(iv_hv_ratio, 3) if iv_hv_ratio else None,
         "liquidity_mult": round(liquidity_mult, 3),
         "flag": flag,
     }
@@ -366,7 +417,7 @@ def compute_all(bundle: dict[str, Any]) -> dict[str, Any]:
     Returns factor scores and signal dicts.
     """
     s_sent, sig_sent = score_sentiment(bundle.get("stocktwits"), bundle.get("apewisdom"))
-    s_opt, sig_opt = score_options(bundle.get("options"))
+    s_opt, sig_opt = score_options(bundle.get("options"), bundle.get("prices"))
     s_si, sig_si = score_si(bundle.get("fundamentals"), bundle.get("finra"))
     s_ta, sig_ta = score_ta(bundle.get("prices"))
     s_cat, sig_cat = score_catalyst(bundle.get("catalysts"))
