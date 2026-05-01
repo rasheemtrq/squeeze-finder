@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.options.greeks import bs_call
+from src.options.greeks import bs_call, bs_put
 from src.util.market_hours import hours_until_close, is_screener_window, now_et
 
 # Liquidity floors — 0DTE specific
@@ -39,6 +39,12 @@ TRADING_DAYS_PER_YEAR = 252
 HOURS_PER_YEAR = TRADING_HOURS_PER_DAY * TRADING_DAYS_PER_YEAR
 
 PAYOFF_MULTIPLES = (2.0, 5.0, 10.0)
+
+# TP/SL multipliers on contract mid (option-price targets, not %-of-account)
+TP1_MULT = 1.5  # +50% — take half off
+TP2_MULT = 3.0  # +200% — take more off
+TP3_MULT = 5.0  # +400% — runner
+SL_MULT = 0.5   # -50% on the contract — full exit
 
 
 def _norm_cdf(x: float) -> float:
@@ -66,6 +72,102 @@ def _put_delta(S: float, K: float, T: float, sigma: float, r: float = RISK_FREE_
     if not g:
         return None
     return g["delta"] - 1.0
+
+
+def _solve_spot_for_target(
+    side: str,
+    K: float,
+    T: float,
+    sigma: float,
+    target_price: float,
+    spot_now: float,
+    r: float = RISK_FREE_RATE,
+) -> float | None:
+    """Bisection: find the underlying price that makes BS option mid = target.
+
+    For calls: target_price > current means spot must rise (search up).
+              target_price < current means spot must fall (search down).
+    Symmetric for puts. Returns None if the target is unreachable inside
+    a 0DTE-plausible spot window (±20% of current).
+    """
+    if target_price <= 0 or T <= 0 or sigma <= 0 or spot_now <= 0:
+        return None
+
+    pricer = bs_call if side == "call" else bs_put
+    cur = pricer(S=spot_now, K=K, T=T, r=r, sigma=sigma)
+    if not cur:
+        return None
+    cur_price = cur["price"]
+
+    # Pick search direction based on whether target is above or below current
+    # AND the option side. Calls increase with spot; puts decrease.
+    if side == "call":
+        rising_target = target_price > cur_price
+    else:
+        rising_target = target_price < cur_price  # puts: lower spot = higher price
+
+    if rising_target:
+        lo, hi = spot_now, spot_now * 1.20
+    else:
+        lo, hi = spot_now * 0.80, spot_now
+
+    # Verify the target is actually bracketed; if not the move required is
+    # >20% intraday — implausible for 0DTE on names in our universe.
+    p_lo = pricer(S=lo, K=K, T=T, r=r, sigma=sigma)
+    p_hi = pricer(S=hi, K=K, T=T, r=r, sigma=sigma)
+    if not p_lo or not p_hi:
+        return None
+    if not (min(p_lo["price"], p_hi["price"]) <= target_price <= max(p_lo["price"], p_hi["price"])):
+        return None
+
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        g = pricer(S=mid, K=K, T=T, r=r, sigma=sigma)
+        if not g:
+            return None
+        # If raising spot raises price (calls), bisect normally.
+        # For puts, the relationship inverts.
+        if side == "call":
+            if g["price"] < target_price:
+                lo = mid
+            else:
+                hi = mid
+        else:
+            if g["price"] > target_price:
+                lo = mid
+            else:
+                hi = mid
+        if abs(hi - lo) < max(0.01, spot_now * 1e-4):
+            break
+    return (lo + hi) / 2
+
+
+def _tp_sl_levels(
+    side: str,
+    strike: float,
+    T_years: float,
+    iv: float,
+    mid: float,
+    spot_now: float,
+) -> dict[str, Any]:
+    """Compute TP1/TP2/TP3/SL — both as option-price targets and required spot levels."""
+    targets = {
+        "tp1_price": round(mid * TP1_MULT, 3),
+        "tp2_price": round(mid * TP2_MULT, 3),
+        "tp3_price": round(mid * TP3_MULT, 3),
+        "sl_price": round(mid * SL_MULT, 3),
+    }
+    spot_keys = {
+        "tp1_price": "tp1_spot",
+        "tp2_price": "tp2_spot",
+        "tp3_price": "tp3_spot",
+        "sl_price": "sl_spot",
+    }
+    spots: dict[str, float | None] = {}
+    for price_key, target_price in targets.items():
+        s = _solve_spot_for_target(side, strike, T_years, iv, target_price, spot_now)
+        spots[spot_keys[price_key]] = round(s, 2) if s else None
+    return {**targets, **spots}
 
 
 def _score_contract(
@@ -136,6 +238,8 @@ def _score_contract(
 
     expected_move_dollars = spot * iv * math.sqrt(T_years)
 
+    tp_sl = _tp_sl_levels(side, strike, T_years, iv, mid, spot)
+
     return {
         "ticker": contract.get("ticker"),
         "side": side,
@@ -155,6 +259,7 @@ def _score_contract(
         "expected_move_dollars": round(expected_move_dollars, 2),
         "expected_move_pct": round(expected_move_dollars / spot, 4) if spot > 0 else None,
         **probs,
+        **tp_sl,
         "score": round(score * 100, 2),
     }
 

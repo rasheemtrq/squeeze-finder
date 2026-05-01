@@ -1,5 +1,6 @@
 import { fetchZeroDte, type ZeroDteContract } from "@/lib/api";
 import { Logo } from "./Logo";
+import { ZeroDteNarrativeCard } from "./ZeroDteNarrative";
 
 const BLOCKED_COPY: Record<string, string> = {
   closed: "US equity market is closed. 0DTE chains only refresh during RTH.",
@@ -26,6 +27,12 @@ function probColor(p: number): string {
   return "text-[var(--muted)]";
 }
 
+function formatPrice(p: number | null | undefined): string {
+  if (p == null) return "–";
+  if (p >= 100) return `$${p.toFixed(0)}`;
+  return `$${p.toFixed(2)}`;
+}
+
 function ContractRow({ c }: { c: ZeroDteContract }) {
   const dirColor =
     c.side === "call" ? "text-[var(--success-fg)]" : "text-[var(--danger-fg)]";
@@ -43,9 +50,6 @@ function ContractRow({ c }: { c: ZeroDteContract }) {
       <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--muted)]">
         {c.delta.toFixed(2)}
       </td>
-      <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--muted)]">
-        {pct(c.expected_move_pct)}
-      </td>
       <td className={`px-3 py-2.5 mono tabular-nums text-right ${probColor(c.p_2x)}`}>
         {formatProb(c.p_2x)}
       </td>
@@ -55,11 +59,27 @@ function ContractRow({ c }: { c: ZeroDteContract }) {
       <td className={`px-3 py-2.5 mono tabular-nums text-right ${probColor(c.p_10x)}`}>
         {formatProb(c.p_10x)}
       </td>
-      <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--muted)]">
-        {c.volume.toLocaleString()}
+      <td className="px-3 py-2.5 mono tabular-nums text-right">
+        <div className="text-[var(--success-fg)]">{formatPrice(c.tp1_spot)}</div>
+        <div className="text-[10px] text-[var(--muted)]">${c.tp1_price.toFixed(2)}</div>
+      </td>
+      <td className="px-3 py-2.5 mono tabular-nums text-right">
+        <div className="text-[var(--success-fg)]">{formatPrice(c.tp2_spot)}</div>
+        <div className="text-[10px] text-[var(--muted)]">${c.tp2_price.toFixed(2)}</div>
+      </td>
+      <td className="px-3 py-2.5 mono tabular-nums text-right">
+        <div className="text-[var(--success-fg)]">{formatPrice(c.tp3_spot)}</div>
+        <div className="text-[10px] text-[var(--muted)]">${c.tp3_price.toFixed(2)}</div>
+      </td>
+      <td className="px-3 py-2.5 mono tabular-nums text-right">
+        <div className="text-[var(--danger-fg)]">{formatPrice(c.sl_spot)}</div>
+        <div className="text-[10px] text-[var(--muted)]">${c.sl_price.toFixed(2)}</div>
       </td>
       <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--muted)]">
-        {c.open_interest.toLocaleString()}
+        {pct(c.expected_move_pct)}
+      </td>
+      <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--muted)]">
+        {c.volume.toLocaleString()}
       </td>
       <td className="px-3 py-2.5 mono tabular-nums text-right text-[var(--accent)]">
         {c.score.toFixed(1)}
@@ -138,40 +158,53 @@ export async function ZeroDteScreener() {
                 </div>
               </div>
             </div>
-            {r.chain_stale && (
-              <span className="text-[10px] mono uppercase tracking-wider text-[var(--warning-fg)] bg-[var(--warning)]/10 px-2 py-1 rounded">
-                stale chain
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {r.chain_stale && (
+                <span className="text-[10px] mono uppercase tracking-wider text-[var(--warning-fg)] bg-[var(--warning)]/10 px-2 py-1 rounded">
+                  stale chain
+                </span>
+              )}
+              <ZeroDteNarrativeCard ticker={r.ticker} />
+            </div>
           </div>
 
-          <table className="w-full text-sm">
-            <thead className="border-b border-[var(--border)]">
-              <tr className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
-                <th className="text-left font-normal px-3 py-2.5">side</th>
-                <th className="text-right font-normal px-3 py-2.5">strike</th>
-                <th className="text-right font-normal px-3 py-2.5">mid</th>
-                <th className="text-right font-normal px-3 py-2.5">delta</th>
-                <th className="text-right font-normal px-3 py-2.5">exp move</th>
-                <th className="text-right font-normal px-3 py-2.5">p(2x)</th>
-                <th className="text-right font-normal px-3 py-2.5">p(5x)</th>
-                <th className="text-right font-normal px-3 py-2.5">p(10x)</th>
-                <th className="text-right font-normal px-3 py-2.5">vol</th>
-                <th className="text-right font-normal px-3 py-2.5">oi</th>
-                <th className="text-right font-normal px-3 py-2.5">score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...r.calls, ...r.puts].map((c) => (
-                <ContractRow key={`${c.side}-${c.strike}`} c={c} />
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-[var(--border)]">
+                <tr className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
+                  <th className="text-left font-normal px-3 py-2.5">side</th>
+                  <th className="text-right font-normal px-3 py-2.5">strike</th>
+                  <th className="text-right font-normal px-3 py-2.5">mid</th>
+                  <th className="text-right font-normal px-3 py-2.5">Δ</th>
+                  <th className="text-right font-normal px-3 py-2.5">p(2x)</th>
+                  <th className="text-right font-normal px-3 py-2.5">p(5x)</th>
+                  <th className="text-right font-normal px-3 py-2.5">p(10x)</th>
+                  <th className="text-right font-normal px-3 py-2.5">tp1 spot</th>
+                  <th className="text-right font-normal px-3 py-2.5">tp2 spot</th>
+                  <th className="text-right font-normal px-3 py-2.5">tp3 spot</th>
+                  <th className="text-right font-normal px-3 py-2.5">sl spot</th>
+                  <th className="text-right font-normal px-3 py-2.5">exp move</th>
+                  <th className="text-right font-normal px-3 py-2.5">vol</th>
+                  <th className="text-right font-normal px-3 py-2.5">score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...r.calls, ...r.puts].map((c) => (
+                  <ContractRow key={`${c.side}-${c.strike}`} c={c} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ))}
 
-      <div className="text-[11px] text-[var(--muted)] mono px-1">
-        score = 1·P(2x) + 2·P(5x) + 3·P(10x), scaled ×100 · all probabilities derived from chain IV
+      <div className="text-[11px] text-[var(--muted)] mono px-1 leading-relaxed space-y-1">
+        <div>
+          score = 1·P(2x) + 2·P(5x) + 3·P(10x), scaled ×100 · probabilities derived from chain IV
+        </div>
+        <div>
+          tp1 = +50% mid (trim) · tp2 = +200% (trim more) · tp3 = +400% (runner) · sl = -50% mid · spot levels solved via Black-Scholes
+        </div>
       </div>
     </div>
   );

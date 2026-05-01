@@ -22,7 +22,13 @@ CORS_ORIGINS = [
 ]
 
 from src import tracker
-from src.analyst.openrouter import OpenRouterError, facts_block, generate_narrative
+from src.analyst.openrouter import (
+    OpenRouterError,
+    facts_block,
+    facts_block_zero_dte,
+    generate_narrative,
+    generate_zero_dte_narrative,
+)
 from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
 from src.data import _cache, prices
 from src.data.prices import DataUnavailable
@@ -157,6 +163,46 @@ def zero_dte_endpoint(top_per_side: int = Query(3, ge=1, le=10), refresh: bool =
         return screen_zero_dte(top_per_side=top_per_side, force_refresh=refresh)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"zero-dte screen failed: {e}") from e
+
+
+ZERO_DTE_NARRATIVE_TTL = 300  # 5 min — 0DTE quotes move fast
+
+
+@app.get("/api/zero-dte/{ticker}/narrative")
+def zero_dte_narrative_endpoint(ticker: str) -> dict:
+    """Haiku tactical analysis of one ticker's 0DTE chain. Cached 5 min."""
+    ticker = ticker.upper()
+    cached = _cache.get("zero_dte_narratives", ticker, ZERO_DTE_NARRATIVE_TTL)
+    if cached:
+        return {**cached, "cached": True}
+
+    screen = screen_zero_dte(top_per_side=3)
+    if not screen.get("ok"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"screener parked: {screen.get('blocked_reason')}",
+        )
+
+    ranked = next((r for r in screen["results"] if r["ticker"] == ticker), None)
+    if not ranked or not (ranked["calls"] or ranked["puts"]):
+        raise HTTPException(status_code=404, detail=f"no 0DTE candidates for {ticker}")
+
+    facts = facts_block_zero_dte(ranked)
+    try:
+        narrative = generate_zero_dte_narrative(facts)
+    except OpenRouterError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    output = {
+        "ticker": ticker,
+        "as_of": ranked["as_of"],
+        "spot": ranked["spot"],
+        "expiry": ranked["expiry"],
+        "narrative": narrative,
+        "cached": False,
+    }
+    _cache.put("zero_dte_narratives", ticker, output)
+    return output
 
 
 @app.get("/api/ticker/{symbol}/options")

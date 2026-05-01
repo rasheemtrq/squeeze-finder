@@ -207,8 +207,35 @@ export type ZeroDteContract = {
   p_2x: number;
   p_5x: number;
   p_10x: number;
+  tp1_price: number;
+  tp2_price: number;
+  tp3_price: number;
+  sl_price: number;
+  tp1_spot: number | null;
+  tp2_spot: number | null;
+  tp3_spot: number | null;
+  sl_spot: number | null;
   score: number;
 };
+
+export type ZeroDteNarrative = {
+  ticker: string;
+  as_of: string;
+  spot: number;
+  expiry: string;
+  narrative: {
+    tldr: string;
+    calls: string[];
+    puts: string[];
+    risk: string[];
+    model_used: string;
+  };
+  cached?: boolean;
+};
+
+export function fetchZeroDteNarrative(ticker: string): Promise<ZeroDteNarrative> {
+  return jsonFetch<ZeroDteNarrative>(`/api/zero-dte/${ticker.toUpperCase()}/narrative`);
+}
 
 export type ZeroDteTickerResult = {
   ticker: string;
