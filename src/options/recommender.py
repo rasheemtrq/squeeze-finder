@@ -116,8 +116,14 @@ def recommend(ticker: str, top_n: int = 8, force_refresh: bool = False) -> dict[
     if not expiries:
         raise DataUnavailable(f"no options for {ticker}")
 
+    # Minute bars during RTH so spot tracks live quotes (daily-bar Close can
+    # lag intraday and produce ITM strikes whose mid < intrinsic).
     try:
-        hist = tk.history(period="1d")
+        hist = tk.history(period="1d", interval="1m")
+        if hist.empty:
+            hist = tk.history(period="2d", interval="1m")
+        if hist.empty:
+            hist = tk.history(period="1d")
         spot = float(hist["Close"].iloc[-1])
     except Exception as e:
         raise DataUnavailable(f"spot fetch failed for {ticker}: {e}") from e

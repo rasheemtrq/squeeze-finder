@@ -55,8 +55,15 @@ def fetch(ticker: str, force_refresh: bool = False) -> dict[str, Any]:
     if expiries[0] != today_iso:
         raise DataUnavailable(f"{ticker} has no 0DTE chain (next expiry {expiries[0]})")
 
+    # Spot must be live for 0DTE — period="1d" returns an aggregated daily
+    # bar whose Close lags the live tape (we observed ITM strikes with
+    # bid < intrinsic during RTH, the classic sign of stale-spot vs
+    # fresh-quote mismatch). 1-minute bars give the live tape.
     try:
-        spot = float(tk.history(period="1d")["Close"].iloc[-1])
+        intraday = tk.history(period="1d", interval="1m")
+        if intraday.empty:
+            intraday = tk.history(period="2d", interval="1m")
+        spot = float(intraday["Close"].iloc[-1])
     except Exception as e:
         raise DataUnavailable(f"spot fetch failed for {ticker}: {e}") from e
 

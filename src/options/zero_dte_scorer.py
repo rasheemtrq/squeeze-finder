@@ -197,6 +197,16 @@ def _score_contract(
     else:
         return None
 
+    # Intrinsic-value floor: an option literally cannot trade below intrinsic
+    # without arbitrage. If yfinance hands us a stale bid/ask whose mid is
+    # below intrinsic, the data is bad — drop the contract rather than
+    # publish nonsense (and rather than silently raising mid to intrinsic,
+    # which would corrupt the TP/SL math). Allow a small (1%) slack for
+    # microstructure noise.
+    intrinsic = max(0.0, spot - strike) if side == "call" else max(0.0, strike - spot)
+    if mid < intrinsic * 0.99:
+        return None
+
     if mid < MIN_MID:
         return None
     if spread_pct is not None and spread_pct > MAX_SPREAD_PCT:

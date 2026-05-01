@@ -28,8 +28,14 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
     if not expiries:
         raise DataUnavailable(f"no options for {ticker}")
 
+    # Use minute bars during RTH so spot tracks live quotes; daily-bar Close
+    # can lag intraday, producing ITM strikes with mid<intrinsic in the
+    # downstream chain summary.
     try:
-        spot = tk.history(period="1d")["Close"].iloc[-1]
+        intraday = tk.history(period="1d", interval="1m")
+        if intraday.empty:
+            intraday = tk.history(period="2d", interval="1m")
+        spot = float(intraday["Close"].iloc[-1]) if not intraday.empty else float(tk.history(period="1d")["Close"].iloc[-1])
     except Exception as e:
         raise DataUnavailable(f"spot fetch failed for {ticker}: {e}") from e
 
