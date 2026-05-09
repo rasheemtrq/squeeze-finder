@@ -11,6 +11,7 @@ from src.data import (
     _cache,
     apewisdom,
     catalysts,
+    dilution,
     finra,
     fundamentals,
     insiders,
@@ -45,6 +46,7 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
         "finra": lambda: finra.fetch(ticker),
         "apewisdom": lambda: apewisdom.fetch(ticker),
         "insiders": lambda: insiders.fetch(ticker),
+        "dilution": lambda: dilution.fetch(ticker),
     }
     for name, fn in sources.items():
         try:
@@ -71,6 +73,20 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
             score = max(0, score - 30)
         elif red_flag == "post_blowoff":
             score = max(0, score - 25)
+
+    # Dilution risk — a pending offering (424B*) or fresh S-1 will kill any
+    # squeeze setup overnight. Treat as a score demote, sized by severity.
+    dil = bundle.get("dilution") or {}
+    dil_severity = dil.get("severity") or "low"
+    if dil_severity == "critical":
+        flags.append("risk:dilution_critical")
+        score = max(0, score - 35)
+    elif dil_severity == "high":
+        flags.append("risk:dilution_high")
+        score = max(0, score - 20)
+    elif dil_severity == "moderate":
+        flags.append("risk:dilution_shelf")
+        score = max(0, score - 8)
 
     fund = bundle.get("fundamentals") or {}
     prices_data = bundle.get("prices") or {}

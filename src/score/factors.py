@@ -313,7 +313,14 @@ def score_si(
             finra_component += 4
         elif trend == "falling":
             finra_component -= 4
-        finra_component = max(0, min(25, finra_component))
+        # "Shorts piling in" is the most reliable historical pre-squeeze
+        # signal in the harness (4 of 12 cases fired before the squeeze).
+        # Lift the FINRA component when both gates are hit. Cap stays at 25
+        # *5 = up to 30 once this is added so the structural-only component
+        # can't pin the factor on its own.
+        if latest >= 0.50 and trend == "rising":
+            finra_component += 8
+        finra_component = max(0, min(33, finra_component))
 
     # Insider open-market buying — contrarian bullish, scaled by total $ value
     # and amplified for cluster buying (3+ insiders within 14d).
