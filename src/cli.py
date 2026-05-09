@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import typer
 from rich.console import Console
@@ -181,6 +182,8 @@ def research_reddit(
     per_source_limit: int = typer.Option(25, help="top N posts per (subreddit, query)"),
     no_comments: bool = typer.Option(False, help="skip top-comments fetch (faster)"),
     output: str = typer.Option("data/research/reddit_strategies.json", help="JSON output path"),
+    harvest_only: bool = typer.Option(False, help="only scrape; skip Haiku synthesis (use when no API key)"),
+    synthesize_from: str | None = typer.Option(None, help="skip scrape; load corpus from this JSON path and only synthesize"),
 ) -> None:
     """Scrape Reddit for 0DTE + squeeze trading patterns and synthesize via Haiku.
 
@@ -189,14 +192,40 @@ def research_reddit(
     Use the synthesis to identify GAPS in what we already model, not as ground truth.
     """
     from pathlib import Path
+
+    from src.research.reddit_strategies import harvest as reddit_harvest
+    from src.research.reddit_strategies import synthesize_with_haiku
     out_path = Path(output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with console.status("scraping Reddit + synthesizing with Haiku (60-90s)..."):
-        report = run_reddit_strategies(
-            per_source_limit=per_source_limit,
-            with_comments=not no_comments,
-        )
+    if synthesize_from:
+        with console.status(f"loading corpus from {synthesize_from} and synthesizing with Haiku..."):
+            corpus = json.loads(Path(synthesize_from).read_text())
+            # corpus may be a full prior report or just a harvest; handle both
+            harvest_data = corpus.get("harvest_data") or corpus
+            if "posts" not in harvest_data and "raw_corpus" in corpus:
+                harvest_data = {"posts": corpus["raw_corpus"], "n_in_corpus": len(corpus["raw_corpus"])}
+            synthesis = synthesize_with_haiku(harvest_data)
+            report = {
+                "as_of": datetime.now(UTC).isoformat(),
+                "synthesis": synthesis,
+                "raw_corpus": harvest_data["posts"],
+                "harvest": {"n_in_corpus": len(harvest_data["posts"])},
+            }
+    elif harvest_only:
+        with console.status("scraping Reddit only (no synthesis)..."):
+            harvest_data = reddit_harvest(per_source_limit=per_source_limit, with_comments=not no_comments)
+            report = {"harvest_data": harvest_data}
+        out_path.write_text(json.dumps(report, indent=2, default=str))
+        console.print(f"[green]wrote harvest-only corpus to {out_path}[/green]")
+        console.print("Run with --synthesize-from <path> on a machine with OPENROUTER_API_KEY to complete.")
+        return
+    else:
+        with console.status("scraping Reddit + synthesizing with Haiku (60-90s)..."):
+            report = run_reddit_strategies(
+                per_source_limit=per_source_limit,
+                with_comments=not no_comments,
+            )
 
     out_path.write_text(json.dumps(report, indent=2, default=str))
     console.print(f"[green]wrote full report to {out_path}[/green]")
