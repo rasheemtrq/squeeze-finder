@@ -1,0 +1,935 @@
+{
+  "as_of": "2026-05-09T19:23:16.798261+00:00",
+  "synthesis": {
+    "zero_dte": {
+      "entry_setups": [
+        {
+          "name": "Pre-market directional bias from mega-cap technicals",
+          "what": "Monitor NVDA/SPY pre-market action and VWAP levels; enter 0DTE calls if NVDA trades up, puts if down. Trade only 30min+ after market open to avoid noise.",
+          "evidence_count": 4
+        },
+        {
+          "name": "Macro event volatility spike",
+          "what": "Enter 0DTE puts/calls on SPY/QQQ immediately after major macro events (Fed announcements, treasury auctions, geopolitical shocks). Example: 20yr auction miss \u2192 0DTE SPY puts.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Earnings day theta decay scalp",
+          "what": "Sell 0DTE credit spreads (QQQ, SPY) on high IV days; target 15-30% premium decay within 5-20min hold window.",
+          "evidence_count": 3
+        }
+      ],
+      "exit_rules": [
+        {
+          "name": "Hard time stop at 20-30 minutes",
+          "what": "Close all 0DTE positions by 30min max hold time regardless of P&L to avoid theta reversal and gap risk into close.",
+          "evidence_count": 5
+        },
+        {
+          "name": "Profit target: 15-30% premium gain",
+          "what": "Exit when premium gains 15-30% from entry; do not hold for larger moves\u2014lock in and re-enter if setup repeats.",
+          "evidence_count": 4
+        },
+        {
+          "name": "Stop loss: -50% premium loss or setup invalidation",
+          "what": "Exit immediately if position loses 50% of premium paid OR if the directional setup (e.g., VWAP bounce, pre-market bias) breaks.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Close before market close",
+          "what": "Never hold 0DTE into final hour; close all positions by 3pm ET to avoid pin risk and after-hours gap.",
+          "evidence_count": 4
+        }
+      ],
+      "risk_mgmt": [
+        {
+          "name": "Position size: max 1-2% account risk per trade",
+          "what": "Size 0DTE positions so max loss = 1-2% of total account. Do not YOLO entire account into single 0DTE.",
+          "evidence_count": 6
+        },
+        {
+          "name": "No leverage / no margin on 0DTE",
+          "what": "Trade only with cash; avoid margin and portfolio margin on 0DTE to prevent forced liquidation on intraday swings.",
+          "evidence_count": 5
+        },
+        {
+          "name": "Mandatory stop loss discipline",
+          "what": "Set hard stops at -50% premium or setup break; do NOT wait for reversal or 'hold through chop'.",
+          "evidence_count": 4
+        },
+        {
+          "name": "Trade only first 2 hours of market open",
+          "what": "Restrict 0DTE entries to 9:30am-11:30am window when volatility is highest and liquidity is best; avoid midday chop.",
+          "evidence_count": 3
+        }
+      ],
+      "common_failures": [
+        "Holding 0DTE overnight or into close expecting reversal; position gaps against you or theta accelerates decay",
+        "YOLO-ing entire account on single 0DTE trade; one bad macro event or gap wipes out all capital",
+        "Revenge trading after loss: doubling down on 0DTE after losing trade to 'make it back'; compounds losses exponentially",
+        "No stop loss discipline: watching position bleed 50%+ hoping for reversal instead of cutting loss at -50%",
+        "Trading outside peak liquidity hours (midday, after 2pm): wider spreads, less volume, higher slippage on exit",
+        "Holding through earnings or major data releases: IV crush and gap risk destroy premium value",
+        "Chasing winners: entering 0DTE after move has already happened; buying high premium into theta decay"
+      ]
+    },
+    "squeezes": {
+      "screening_criteria": [
+        {
+          "name": "High short interest + low float + institutional lock-up",
+          "what": "Screen for stocks with short interest >15% of float, float <50M shares, and >70% of shares held by institutions (hard to borrow/sell). Example: CVNA, ROOT, AVIS.",
+          "evidence_count": 5
+        },
+        {
+          "name": "Naked short exposure via total return swaps",
+          "what": "Identify stocks where large positions are disclosed via Form 3/4 using cash-settled TRS (e.g., Pentwater/AVIS disclosed ~30% exposure via swaps). Cross-reference SEC filings for swap notional.",
+          "evidence_count": 4
+        },
+        {
+          "name": "Failures to deliver (FTD) spike + dark pool volume >70%",
+          "what": "Screen for FTD average >10k shares/day and dark pool trade volume >70% of total; indicates synthetic short creation and hiding.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Insider selling cliff + index fund forced buying",
+          "what": "Identify stocks where insiders dump shares (CEO selling $3-4M daily) coinciding with S&P inclusion or rebalance dates; retail/passive forced to buy into exit liquidity.",
+          "evidence_count": 3
+        }
+      ],
+      "entry_triggers": [
+        {
+          "name": "Form 3/4 disclosure of large position + 27-30 day catalyst window",
+          "what": "Enter long calls/shares 1-3 days after Form 3 filing of large activist position; historical pattern shows squeeze 27-30 days post-filing (e.g., Pentwater/AVIS filed 2/24, squeezed 3/23).",
+          "evidence_count": 3
+        },
+        {
+          "name": "VOEX (volatility of expiration) spike to -5 or lower",
+          "what": "Enter long positions when VOEX drops to -5 or below; historical pattern: VOEX -5 spike occurred 10 days before 2021 GME squeeze, 5 days before 2024 GME requalification, precedes 2025 squeeze.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Warrant issuance + direct registration option",
+          "what": "Enter long positions when company issues warrants (e.g., GME 59M warrants) and enables direct registration via ComputerShare; removes broker intermediary and forces covering of synthetic shorts.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Authorized share cap approaching + convertible bond conversion risk",
+          "what": "Enter long when company nears authorized share limit (e.g., GME ~1B authorized, ~575M issued/convertible); shorts cannot cover if no new shares available to issue.",
+          "evidence_count": 3
+        }
+      ],
+      "exit_rules": [
+        {
+          "name": "Exit on 500%+ move or 10-bagger",
+          "what": "Take profits when position reaches 500%+ gain or 10x return; do not hold for 'infinity squeeze'\u2014lock in gains and redeploy.",
+          "evidence_count": 4
+        },
+        {
+          "name": "Exit on insider selling acceleration",
+          "what": "Close position if insiders begin heavy selling (>$1M/day) or if CEO/board dumps shares; signals end of squeeze window.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Exit on failed catalyst or dilution announcement",
+          "what": "Exit if announced dilution (new share issuance, ATM offering) or if expected catalyst (merger, earnings beat) fails to materialize.",
+          "evidence_count": 3
+        },
+        {
+          "name": "Exit on short interest decline below 10%",
+          "what": "Close position if short interest drops below 10% of float; indicates shorts have covered and squeeze momentum is exhausted.",
+          "evidence_count": 3
+        }
+      ],
+      "common_failures": [
+        "Holding through entire squeeze expecting 'infinity'; missing exit at 500%+ and watching gains evaporate on reversal",
+        "Entering squeeze too late (after 50%+ move already happened); buying high premium into theta decay and volatility crush",
+        "Confusing long-term thesis with squeeze play; holding for 'company fundamentals' instead of exiting on technical squeeze completion",
+        "Ignoring dilution risk: company issues new shares or convertible bonds during squeeze, crushing stock price",
+        "Over-leveraging on squeeze play; using margin and getting liquidated on intraday pullbacks before squeeze completes",
+        "Chasing multiple squeezes in a row; survivor bias leads to belief every high-short-interest stock will squeeze (most don't)",
+        "Not monitoring insider selling; insiders dump shares into squeeze, signaling end of move; retail left holding bags"
+      ]
+    },
+    "data_sources_mentioned": [
+      "SEC filings (Form 3/4, 13F, FTD data)",
+      "OpenInsider.com (insider trading activity)",
+      "Short interest data (Finra, Ortex, S3 Partners)",
+      "Dark pool volume trackers",
+      "VOEX (volatility of expiration) indicators",
+      "Federal Reserve print orders and circulation data",
+      "Reuters, CNBC, Yahoo Finance articles",
+      "ComputerShare DRS data",
+      "Robinhood, Fidelity, Interactive Brokers account data",
+      "Substack (Michael Burry analysis)"
+    ],
+    "tools_mentioned": [
+      "Robinhood (options trading, margin)",
+      "Fidelity (retirement accounts, options)",
+      "Interactive Brokers (portfolio margin, derivatives)",
+      "ThinkorSwim (charting, options chains)",
+      "ComputerShare (direct registration, warrant registration)",
+      "Imgur (position screenshots)",
+      "Twitter/X (real-time market commentary)",
+      "ChatGPT (research, analysis)",
+      "Archive.is (article archiving for evidence)",
+      "Ortex (short interest, FTD data)"
+    ],
+    "honest_caveats": "The corpus is heavily survivorship-biased: posts showing 10x gains and $100k+ wins dominate, while the majority of 0DTE traders lose money (India data: 90% of retail derivatives traders losing). Multiple posts describe catastrophic losses ($120k, $200k+) after initial wins, suggesting the 'winning' posts are statistical outliers. Squeeze patterns (CVNA, AVIS, GME) are rare and often preceded by years of false signals; most high-short-interest stocks never squeeze. Treat all patterns as probabilistic edge, not certainties.",
+    "model_used": "anthropic/claude-haiku-4.5"
+  },
+  "raw_corpus": [
+    {
+      "subreddit": "wallstreetbets",
+      "title": "THE DEFLATION GLITCH: Why $2 Bills are the ultimate hedge against the Fed",
+      "selftext": "Listen up, you beautiful regards. While you\u2019re out here chasing 0DTE options and getting liquidated, I\u2019ve been studying the real macro-economics. We don't need a gold standard. We need the Jefferson Standard.\n\nThe Stats (The \"Due Diligence\")\n\nAccording to the Federal Reserve, there are only about 1.7 billion $2 bills in circulation. Compare that to the 14.9 billion $1 bills cluttering up the place. The Fed even ordered up to 416 million more for 2025 (Source: Federal Reserve Print Order), but the public thinks they\u2019re \"rare.\"\n\nThis is the ultimate psychological arbitrage.\n\nThe Strategy: \"Seed and Bleed\"\n\nThe plan is simple. We exploit the \"collector's fallacy\" to force a deflationary spiral and break the CPI.\n\n1. The $22 Withdrawal: Go to your bank and demand a stack of $2s. If the teller looks at you funny, tell them you're a high-stakes tooth fairy.\n\n2. The 11-Note Daily Spend: Spend exactly $22 a day (11 Jeffersons) on everything. Coffee? Jeffersons. Gas? Jeffersons. Divorce attorney? Jeffersons.\n\n3. The \"Change\" Multiplier: When you pay for a $12 lunch with $22 in $2 bills, that cashier is now holding a stack of \"rare\" money. When the next customer comes in, the cashier hands them $10 in change... using your $2 bills.\n\n4. The Hoard Phase: Because regular people are economically illiterate, they see a $2 bill and think, \"Whoa, a relic! I must tuck this into my sock drawer forever.\"\n\nThe Result: Artificial Scarcity\n\nIf enough of us do this, we effectively remove money from ",
+      "score": 18210,
+      "num_comments": 1070,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1rsb64m/the_deflation_glitch_why_2_bills_are_the_ultimate/",
+      "id": "1rsb64m",
+      "created_utc": 1773368911.0,
+      "flair": "Meme",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Investing changed my life",
+      "selftext": "No story just 0dte SPY. Maybe this year I\u2019ll get em",
+      "score": 8950,
+      "num_comments": 635,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1q4mqj0/investing_changed_my_life/",
+      "id": "1q4mqj0",
+      "created_utc": 1767622427.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "realsafetydave is a prophet \ud83d\udd2e",
+      "selftext": "Have a day realsafetydave you earned it man \ud83d\udc4f\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND\n\nDRSGME\n\nSHORTSRFUKD\n\nWARRANTSINBOUND",
+      "score": 7978,
+      "num_comments": 310,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1ncvani/realsafetydave_is_a_prophet/",
+      "id": "1ncvani",
+      "created_utc": 1757452324.0,
+      "flair": "\u2601 Hype/ Fluff",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Can you guess when I discovered options?",
+      "selftext": "From 2.2k in November to 6k in February on SMCI, then from 6k to 10k on TSSI, then from 10k to 13k on PSIX, then I found 0DTE options and the rest is history. Anyone wanna sell me a rope and stool for 6 cents?",
+      "score": 7947,
+      "num_comments": 331,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1lzcpnr/can_you_guess_when_i_discovered_options/",
+      "id": "1lzcpnr",
+      "created_utc": 1752465895.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "The Golden Treasure Part II [100% Proof Apes Get Paid]",
+      "selftext": "**TL;DR: The new Presidential Admin \\[Trump Administration\\] wants a resolution to the MMTLP situation \\[an indefinitely halted stock full of naked short positions\\]. The company that issued MMTLP successfully filed subpoenas to Citadel, Virtue, DTCC, and others for trading and share data. Multiple credible sources further confirm (1) the MMTLP stock price's exponential explosion before the rare U3 halt and reversal and (2) that a resolution is virtually guaranteed at this point. Upon resolution of MMTLP, the gates open for the resolution of naked shorting with GME as well as other heavily naked shorted basket stocks.**\n\n\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n\nRecommended Prerequisite DD:\n\n1. [The Golden Treasure Part I \\[100% Proof Apes Get Paid\\]](https://www.reddit.com/r/Superstonk/comments/1ahuip4/the_golden_treasure_100_proof_apes_get_paid/)\n\n\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n\n[The Golden Treasure Part II \\[100% Proof Apes Get Paid\\]](https://imgur.com/a/iBtj97o)\n\n\u00a71: MMTLP History to Now / Further Confirmation of Naked Shorting\n\n\u00a72: New Presidential Administration Wants Resolution\n\n\u00a73: Post-Resolution Opens Gates for GME Resolution\n\n\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n\n**\u00a71: MMTLP History to Now / Further Confirmation of Naked Shorting**\n\nI want to start with a quick disclaimer for those that haven't read Part I of my DD, or those that need a refresher.\u00a0**This stock is non-tradeable.**\u00a0It has been that way for years at this point. Y",
+      "score": 7925,
+      "num_comments": 381,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1ohiz4y/the_golden_treasure_part_ii_100_proof_apes_get/",
+      "id": "1ohiz4y",
+      "created_utc": 1761582234.0,
+      "flair": "\ud83d\udcda Due Diligence",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Finally hit $1k at 21 years old. Dm me for investment advice/s",
+      "selftext": "Lil mix of 0dte SPY puts during the Santa rally, SLS calls at the top, and some HOOD calls the other day. Spy calls in the second and third slide, SLS calls in the third and fourth slide (expired worthless). HOOD calls unrealized but it\u2019s a smaller amount and will likely expire worthless if not at a 60% loss today. Just got a $40k truck that I\u2019m paying $850 a month on as well. Overtime for the next two years. Second job incoming this month as well.",
+      "score": 7725,
+      "num_comments": 310,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1qux824/finally_hit_1k_at_21_years_old_dm_me_for/",
+      "id": "1qux824",
+      "created_utc": 1770137546.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "That\u2019s it folks",
+      "selftext": "It has been quite the coping process with this. Very blessed that this was only about ~ 12% of my net worth but still took a heavy toll on me. I\u2019m a very frugal person and rarely spend my money on pleasures so spending 120k on nothing fucked me up. I never intended to trade, I had put some money in Robinhood for the gold yield (ironically because I was even scared to go into the S&amp;P at the time) and lost a lot of money quick on 0dte options. My big pitfall was instead of leaving it there, I decided since I lost the money from trading I\u2019d have to make it back through trading to be even. Instead of doubling down on business, I doubled down on what got me in the hole in the first place. For anyone who\u2019s down I recommend moving on. Realize you are gambling if you are playing with low dte options. If you want to make your money back, work on getting a promotion, excelling your business, whatever you did to get that money initially. Don\u2019t make the same mistake as me. Glad to leave this all in the past and learn a valuable lesson. I wouldn\u2019t want to ever live on such an unstable foundation. S&amp;P only for me here on out. And focusing on business. Leaving this brutal loss in the past and never touching options or any stocks for that matter ever again. Unless you\u2019re planning to be a full time trader which you\u2019re highly unlikely to succeed in, it really is just a waste of time and an emotional rollercoaster. Even if I could be a trader I wouldn\u2019t want to be after realizing the br",
+      "score": 6775,
+      "num_comments": 1086,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mvrzpn/thats_it_folks/",
+      "id": "1mvrzpn",
+      "created_utc": 1755725425.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Comprehensive Due Diligence Report: RICO Prosecution of Naked Short Sellers Targeting GameStop Corporation",
+      "selftext": "**PUBLIC SUBMISSION FOR:**  \n\n**Federal Bureau of Investigation (FBI)**\n\n**U.S. Securities and Exchange Commission (SEC)**\n\n**U.S. Department of Justice (DOJ)**\n\n**Date:** October 13, 2025  \n\n**Prepared by:** **Agent 31337**, Anonymous Retail Investor Coalition, Drawing from r/SuperStonk Community Research and Public Records\n\n**Executive Summary:**  \n\n**This report compiles over 1,000 pages of due diligence on naked short selling activities against GameStop Corporation (GME). It details a pattern of racketeering under the Racketeer Influenced and Corrupt Organizations (RICO) Act (18 U.S.C. \u00a7\u00a7 1961\u20131968), involving securities fraud, wire fraud, money laundering, and market manipulation. Evidence spans years from r/SuperStonk, historical cases, regulatory filings, and recent developments. Laws broken are specified in each section, with predicate acts tied to RICO. Sources are cited with direct links; images are linked for verification. This enterprise, involving hedge funds, market makers, and brokers, constitutes financial terrorism by diluting shares and suppressing prices, harming investors and the economy.**\n\n**Section 1**: Introduction to Naked Short Selling and RICO Framework\n\nNaked short selling creates synthetic shares without borrowing, violating settlement rules and inflating supply. This is not mere speculation but a coordinated scheme. Under RICO, this forms an enterprise with predicate acts like securities fraud (18 U.S.C. \u00a7 1348) and wire fraud (18 U.S.C. \u00a7 1343).",
+      "score": 6449,
+      "num_comments": 257,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1o5zvs7/comprehensive_due_diligence_report_rico/",
+      "id": "1o5zvs7",
+      "created_utc": 1760398466.0,
+      "flair": "\ud83d\udcda Due Diligence",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "unemployed tech worker",
+      "selftext": "all from 0dte, and all positions closed\n\nEDIT:\n\ngetting a lot of messages for positions. i sold theta. no stocks. i would attach positions to original post but cant add, so here is imgur link https://imgur.com/a/v22MwWf. positions from the last 2 trading days",
+      "score": 6254,
+      "num_comments": 562,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1s7x0hn/unemployed_tech_worker/",
+      "id": "1s7x0hn",
+      "created_utc": 1774891282.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "The final bell \ud83d\ude2d",
+      "selftext": "I am down to my last $1000 ever. I\u2019ve also blown multiple fidelity accounts. My family is involved now and I\u2019ve lost control over finances so now I am basically locked out, no access to funds, and will just be given allowance money that\u2019s monitored. I\u2019m F\u2019d but I deserve it. Oh I have to check myself into a gambling recovery program this week too. \n\nSad I wasn\u2019t a chosen one. I\u2019ve had very few glorious wins but so many more traumatic trades (obviously) - 0dte plays where I had like $5K profits go to zero or plays where I booked $5K profits but had I held would\u2019ve gone onto 20K, 40K, 60K. \n\nAnyways, good game regards. My last $1K buying calls on Spotify earnings tomorrow.",
+      "score": 6106,
+      "num_comments": 845,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1qzysc7/the_final_bell/",
+      "id": "1qzysc7",
+      "created_utc": 1770625454.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$10k-&gt;$123k in 21 minutes",
+      "selftext": "Saw the 20 year auction come in like shit and YOLO\u2019d 10k into 0DTE puts",
+      "score": 5999,
+      "num_comments": 573,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1ks3t03/10k123k_in_21_minutes/",
+      "id": "1ks3t03",
+      "created_utc": 1747848713.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "No WE did not MISUNDERSTAND.",
+      "selftext": "We came here for a MOASS based on the FUNDAMENTALS. Shorts were overleveraged. The money made from the Squeeze was the fodder for the company's transformation not the other way around. Tired of all these post sneeze bandwagoners trying to convince us this is a long term play to get the company to success THEN making us rich. If ANY of that was true then you're admitting all of the DDs that brought us here was just garbage. You're saying RoaringKitty's thesis was garbage. \n\nStop trying to GASLIGHT us into thinking that $9 Billion over 5 years off the backs of Shareholders is some kind of flex when we could have been sitting on HUNDREDs of Billions off the back of CORRUPT HEDGE FUNDS with enough for EACH AND EVERY one of you to live comfortably AND help the company. \n\nThe \"Long term\" plan has always been to let it   \n1) Let it Squeeze   \n2) Never sell (Because you won't need to) so the price will never come down since there's more rehypothecated shares in existence then actual shares.   \n3) Leverage stock assets for churning wealth and doing good for the world instead of having HF's destroy it.  \n  \nIts evident every time when you corporate shills post trying to move the goal post to make us wait it out and I'll downvote you everytime. And if RC is a plant I'll vote him out too.",
+      "score": 5659,
+      "num_comments": 847,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1ocir23/no_we_did_not_misunderstand/",
+      "id": "1ocir23",
+      "created_utc": 1761066700.0,
+      "flair": "\ud83d\udde3 Discussion / Question",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Made it to the holy land , how do I buy 0DTE puts irl?",
+      "selftext": "",
+      "score": 5522,
+      "num_comments": 213,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1s91vf2/made_it_to_the_holy_land_how_do_i_buy_0dte_puts/",
+      "id": "1s91vf2",
+      "created_utc": 1774995134.0,
+      "flair": "Meme",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "I thought Americans were the regardest. Then I discovered the Indian derivatives trading market",
+      "selftext": "Apparently in 2024 India accounted for 84% of all equity  option contracts traded globally. The volume of contracts has more than doubled yoy since 2020. Apparently the rise in contracts is due to retail investors having now access to options, and in particular 0dte options. 9 out of 10 retail investors in India are losing money, despite the Indian index crashing the  S&amp;P500 in the past 5 years. Reuters says that more than 40% of derivatives traders were under 30, and over three-quarters earned less than 500,000 Indian rupees, or about $6,000, per year\". \n\nCongrats guys, you are smashing! What's the equivalent of a Wendy's there?\n\nSources: \n\nhttps://www.economist.com/finance-and-economics/2024/05/02/hedge-funds-make-billions-as-indias-options-market-goes-ballistic\n\nhttps://www.cnbc.com/2025/07/10/cnbcs-inside-india-newsletter-indias-options-market-faces-a-reality-check.html",
+      "score": 5435,
+      "num_comments": 384,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1lxl4b5/i_thought_americans_were_the_regardest_then_i/",
+      "id": "1lxl4b5",
+      "created_utc": 1752274985.0,
+      "flair": "News",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Thomas Peterffy, CEO of Interactive Brokers, once again confirmed in a recent interview, that the price in 2021 would have gone to infinity if the buy button wasn't shut off",
+      "selftext": "",
+      "score": 5401,
+      "num_comments": 179,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1nw3cdd/thomas_peterffy_ceo_of_interactive_brokers_once/",
+      "id": "1nw3cdd",
+      "created_utc": 1759410587.0,
+      "flair": "\ud83d\udde3 Discussion / Question",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Michael Burry - Foundations: The Big Short Squeeze",
+      "selftext": "[https://michaeljburry.substack.com/p/foundations-the-big-short-squeeze](https://michaeljburry.substack.com/p/foundations-the-big-short-squeeze)\n\nNew Michael Burry just dropped, and yes it's about Gamestop.\n\n# Foundations: The Big Short Squeeze\n\n# Gamestop: The Prequel\n\nTore a blade from my lawn and \u2013 without so much as a peep \u2013 launched it toward the moon.  \nUnsure as to east or west, as that was not my intention, I knew where it would land.  \nThere, next to the living, to die and feed the next generation. Such is the trajectory of many, many common stocks. In a distinguishly analog manner, I know this. Stacked in Scion\u2019s conference room are S&amp;P stock guides for every\u00a0month\u00a0going back to 1968. I guarantee you have not heard of the vast majority of the companies in those guides. For those that do not trust anything analog, since 1990, there have been over\u00a0750\u00a0replacements in the S&amp;P\u00a0500\u00a0Index. Google\u2019s Gemini 3 Pro swears by it. Claude Max agrees.\n\nGemini 3 Pro and Claude Max further propose that\u00a045%\u00a0of the top 20 names in the 1999 NASDAQ 100 ended up bankrupt or acquired after a &gt;75% loss. This checks out, my conference room says.  \nCapital is always fighting to be recycled.\n\nThusly, you now carry the knowledge that most investors are best off in an index \u2013 and have no need to invest in individual stocks.  \nIf one is rather young and has 50-70 years left, then one absolutely should be almost entirely invested in common stock\u00a0indices, preferably the S&amp;P 500 or ",
+      "score": 5216,
+      "num_comments": 569,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1pntmak/michael_burry_foundations_the_big_short_squeeze/",
+      "id": "1pntmak",
+      "created_utc": 1765861752.0,
+      "flair": "\ud83d\udcda Due Diligence",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Feeling excited rn blblblrbl",
+      "selftext": "I hope gme squeezes soon blblbllblblb ,blblbllblblbblblbllblblbblblbllblblb need to add atleast 250 characters so blblbllblblb blblbllblblb blblbllblblb lmao blblbllblblb blblbllblblb blblbllblblb blblbllblblb blblbllblblb blblbllblblb blblbllblblb blblbllblblb",
+      "score": 4968,
+      "num_comments": 100,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1quv1xx/feeling_excited_rn_blblblrbl/",
+      "id": "1quv1xx",
+      "created_utc": 1770132784.0,
+      "flair": "\ud83e\udd21 Meme",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "MEMORANDUM FOR THE RECORD: DUE DILIGENCE REPORT ON POTENTIAL SYSTEMIC MARKET MANIPULATION VIA TOTAL RETURN SWAPS AND CAYMAN-DOMICILED FEEDER FUNDS IN SHORT-SELLING ACTIVITIES TARGETING GAMESTOP CORP. ($GME)",
+      "selftext": "**MEMORANDUM FOR THE RECORD: DUE DILIGENCE REPORT ON POTENTIAL SYSTEMIC MARKET MANIPULATION VIA TOTAL RETURN SWAPS AND CAYMAN-DOMICILED FEEDER FUNDS IN SHORT-SELLING ACTIVITIES TARGETING GAMESTOP CORP. ($GME)**\n\n**PUBLIC SUBMISSION FOR:** \n\n**Federal Bureau of Investigation (FBI)**\n**Securities and Exchange Commission (SEC)**\n**Department of Justice (DOJ)**\n\n**From:** **[Agent 31337 \u2013 NOT A CAT for Public Submission]**\n\n**Date:** November 1, 2025  \n\n**Re:** Urgent Examination of Undisclosed Synthetic Short Exposures Through Offshore Structures: Implications for Securities Fraud, Market Manipulation, and Tax Evasion Under 15 U.S.C. \u00a7 78j(b), 26 U.S.C. \u00a7 7201, and Related Statutes.\n\n**Classification:** Unclassified; Public Submission for Investigative Review  \n\n**I. Executive Summary and Purpose**\n\nThis due diligence memorandum compiles verifiable evidence from public regulatory filings, investigative databases, market data, and social media intelligence to highlight a potential \"smoking gun\" in the ongoing scrutiny of short-selling practices targeting GameStop Corp. ($GME). Specifically, it focuses on the use of **total return swaps (TRS)** routed through **Cayman Islands-domiciled feeder funds** by major hedge funds and institutions (e.g., Citadel Advisors LLC, Susquehanna International Group, Millennium Management, and D.E. Shaw &amp; Co.) to obscure massive synthetic short exposures. These mechanisms may enable evasion of SEC disclosure requirements under Rules 13d-3 and 10",
+      "score": 4803,
+      "num_comments": 178,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1olv8ox/memorandum_for_the_record_due_diligence_report_on/",
+      "id": "1olv8ox",
+      "created_utc": 1762021869.0,
+      "flair": "\ud83e\uddf1 Market Reform",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Look What I Found In The Epstein Files",
+      "selftext": "Full email chain:  \n[https://www.justice.gov/epstein/files/DataSet%209/EFTA00083356.pdf](https://www.justice.gov/epstein/files/DataSet%209/EFTA00083356.pdf)\n\nWas searching for Ken Griffin and came across this.\n\nThis document is almost a year long email chain discussing the SEC, naked shorting, Ken Griffin, Knight Capital and more... \n\nAll from the \"Whistleblower Extraordinaire\".",
+      "score": 4732,
+      "num_comments": 146,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1quz4ue/look_what_i_found_in_the_epstein_files/",
+      "id": "1quz4ue",
+      "created_utc": 1770141620.0,
+      "flair": "\ud83d\udde3 Discussion / Question",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Oh chet! get your helmets guys!",
+      "selftext": "I remember reading indications of Japan's yen basketed with GME and an important trigger for squeezes. Wish i saved the video for source. Sorry guys. Go grab your helmets guys, color me surprised if on June 10, our CEO says we're acquiring a company with an positive increase on all levels.  Never been more bullish. Can't believe GME is actually the safest stock in this economic climate. Insane. Anyways leggoooo",
+      "score": 4626,
+      "num_comments": 179,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1l09l75/oh_chet_get_your_helmets_guys/",
+      "id": "1l09l75",
+      "created_utc": 1748731029.0,
+      "flair": "\u2601 Hype/ Fluff",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Position went 10x to 70k while i was asleep",
+      "selftext": "Been debating posting this for the last 3 hours, not sure if i can handle the shit talking I\u2019m about to receive and deserve for this one, but at least you guys can have a laugh at my misery.\n\nIm in Australia but trading SPY, so markets are open from 9.30pm to 4am.\n\nLong story short i Yolod a 0dte position of 190 x 707p, accidentally fell asleep while still holding roughly sometime just after midnight with my position sitting at a 60% odd loss. I woke up at about 3.30am and freaked out immediately checking my position and seeing it was at almost break even again. Sold it immediately and then noticed on my acc balance chart there was a huge spike to 77k from the 6k balance i had.\n\nNo i didnt set a stop loss, no i didnt set a take profit, yes i am a complete retard who deserves this.\n\nI honestly thought it was a glitch until i checked spys charts and saw the dump around 1am.\n\nI feel sick to my stomach\n\nTHANK YOU FOR YOUR ATTENTION TO THIS MATTER",
+      "score": 4620,
+      "num_comments": 461,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1styb38/position_went_10x_to_70k_while_i_was_asleep/",
+      "id": "1styb38",
+      "created_utc": 1776985229.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "MORE FROM EPS TE IN FILES: Jeff was asked by an ex-JPM led family office if he wanted pre-IPO shares access to later short. THAT EXISTS?! Since when can non-underwriters get pre-IPO shares? Could HFs be getting secret access to IPOs then, like HKD/MEGL, as GME collateral? Or soon Space X, OpenAI...",
+      "selftext": "Saw this elsewhere in the files. Since when can random people be getting access to pre-IPO shares????\n\nFor those of you following I wrote about how IPOs for HKD &amp; MEGL could have been weaponized against GME here: \n\n  \n[https://www.reddit.com/r/Superstonk/comments/1r0lmau/just\\_realized\\_this\\_hkd\\_prob\\_used\\_a\\_naked\\_short/](https://www.reddit.com/r/Superstonk/comments/1r0lmau/just_realized_this_hkd_prob_used_a_naked_short/)\n\n  \n**JUST REALIZED THIS(!): HKD prob used a \"naked short\" greenshoes/overallotment option in its IPO near Aug 5 2022. I wrote about these b4. Underwritten by Loop Capital/Anthony Chukumba (hates GME), this \"squeeze\" made it the world's 14th biggest stock instantly. BUT, MEGL prob greenshoe'd Aug 5 too**\n\n\n\n  \nIf you missed it, I also found links to the overallotment/greenshoe clause that lets them legally short both stocks in each statement:\n\n# MEGL\n\n[https://www.sec.gov/Archives/edgar/data/1881472/000121390022045048/f424b40822\\_magic.htm](https://www.sec.gov/Archives/edgar/data/1881472/000121390022045048/f424b40822_magic.htm)\n\n\"\u00a0**the underwriters may engage in transactions effected in accordance with Regulation M under the Exchange Act that are intended to stabilize, maintain or otherwise affect the price of our Ordinary Shares. The underwriters may engage in over-allotment\u00a0sales,\"**\n\n\n\n# HKD\n\nHKD:\u00a0[https://links.sgx.com/FileOpen/AMTD%20IDEA%20Group%20-%20AMTD%20Digital%20IPO%20Pricing%20Press%20Release%20-%20FINAL.ashx?App=Announcement&amp;FileI",
+      "score": 4581,
+      "num_comments": 148,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1r28ktf/more_from_eps_te_in_files_jeff_was_asked_by_an/",
+      "id": "1r28ktf",
+      "created_utc": 1770841610.0,
+      "flair": "\ud83e\udd14 Speculation / Opinion",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Burry: And do not mind media @CNBC that comment without reading both articles.",
+      "selftext": "",
+      "score": 4446,
+      "num_comments": 96,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1qoo9qi/burry_and_do_not_mind_media_cnbc_that_comment/",
+      "id": "1qoo9qi",
+      "created_utc": 1769542995.0,
+      "flair": "\ud83d\udcf3Social Media",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Do not sell your WARRANTS! Short Hedge Funds need to locate them. The Warrants are the squeeze you've been looking for!!",
+      "selftext": "It's simple supply and demand. GME issued all Warrants. Mine are safe in CS account, but they have not showed in my Fidelity retirement account. Which means, SHF will need to buy my Warrants from CS to deliver the obligation to my retirement account. When we hold something they need, WE CONTROL PRICE!",
+      "score": 4285,
+      "num_comments": 395,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1o0gpk6/do_not_sell_your_warrants_short_hedge_funds_need/",
+      "id": "1o0gpk6",
+      "created_utc": 1759848169.0,
+      "flair": "\ud83d\udde3 Discussion / Question",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Damn thanks for the advice.",
+      "selftext": "Get hyped. I\u2019ve been around since the fall of 2020, pre sneeze. I have gone absolutely nowhere. Something smells different right now. Let\u2019s fucking go.\n\nMy two cents: four years seems a long time to hold shares, especially for a community of people who mostly started as degenerates on a different sub. I was looking for a quick buck then. I thought my original calls would hopefully become 5 baggers and I could rotate that cash into some other degenerately leveraged position that I would spend all of two minutes analyzing. Those calls did well, a cool 20X+. Then everything changed in January of 2021. It wasn\u2019t just the \u201cfuck \u2018em\u201d feeling of the buy button being turned off. It was a feeling that I needed to deeply understand why I miscalculated my position to such a large degree. Everything I read said the stock would go up in price precipitously as the shorts began to close their positions. Then it tanked. Why? \u201cI guess Wall Street really is smarter than Main Street,\u201d I thought to myself. \u201cI must truly not understand market mechanics if they were able to trade their way into closing their position.\u201d \u201cThat was the squeeze I guess\u2026\u201d I felt so fucking defeated. Then March of 2021 came around. We were BACK. How? I thought they closed their positions. January of 2021 proved the hive mind was smarter than the world anticipated, but March of 2021 proved to me that the existing institutions and market mechanics were more corrupt than I could have anticipated. Nothing has changed.\n\nFour",
+      "score": 4090,
+      "num_comments": 91,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1kwz6c1/damn_thanks_for_the_advice/",
+      "id": "1kwz6c1",
+      "created_utc": 1748380730.0,
+      "flair": "\ud83d\udc7d Shitpost",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "1M Warrants Traded 18 Minutes of the Warrants being live\u2026",
+      "selftext": "",
+      "score": 4079,
+      "num_comments": 521,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1o1b0s6/1m_warrants_traded_18_minutes_of_the_warrants/",
+      "id": "1o1b0s6",
+      "created_utc": 1759931388.0,
+      "flair": "\ud83d\udcf0 News",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Regards, may I present: the Fat F*ck Index",
+      "selftext": "I'm playing both sides so I always come out on top.  Saw someone mention this a few weeks ago and figured I would give it a shot, now just trying to figure out how to buy 0DTE calls on this index.",
+      "score": 3978,
+      "num_comments": 211,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1sxknm4/regards_may_i_present_the_fat_fck_index/",
+      "id": "1sxknm4",
+      "created_utc": 1777333216.0,
+      "flair": "Meme",
+      "source_reason": "retail tactics + recent winners/losers",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "\ud83d\udd2e Reuters is MASS UPDATING even more GameStop articles from The Jan 2021 GME sneeze -- 8 \ud83d\udc40 additional examples found, linked, &amp; archived -- Hunting for more right now \ud83d\udd25\ud83d\udca5\ud83c\udf7b",
+      "selftext": "# The First Jan 2021 Reuters Article We Found Updated Oct 2025 with key statements deleted/changed: \"Explainer: Why regulators may scrutinize GameStop's Reddit-driven retail stock surge\"\n\n* Originally posted Jan 28, 2021\n* Updated Oct 9, 2025\n* [https://www.reuters.com/business/why-regulators-may-scrutinize-gamestops-reddit-driven-retail-stock-surge-2025-10-09/](https://www.reuters.com/business/why-regulators-may-scrutinize-gamestops-reddit-driven-retail-stock-surge-2025-10-09/)\n* [https://archive.is/u92KG](https://archive.is/u92KG)\n* [https://www.reddit.com/r/Superstonk/comments/1o4hnbf/i\\_reached\\_out\\_to\\_the\\_journalist\\_behind\\_the/](https://www.reddit.com/r/Superstonk/comments/1o4hnbf/i_reached_out_to_the_journalist_behind_the/)\n* [https://www.reddit.com/r/Superstonk/comments/1o2t31h/reuters\\_reprinting\\_a\\_2021\\_article\\_blaming\\_retail/](https://www.reddit.com/r/Superstonk/comments/1o2t31h/reuters_reprinting_a_2021_article_blaming_retail/)\n\n# \ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\n\n# \ud83d\udea8 8 NEW EXAMPLES LISTED BELOW\n\n# \ud83d\udea8 I haven't had time to look for the differences yet- that's where all of us regards come together to hive mind the sh*t out of this!\n\n# \ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\ud83d\udd2e\n\n\n\n# 1. \"The big short: GameStop effect puts global bets worth billions at risk\"\n\n* Originally posted Jan 27, 2021\n* Updated Today, Oct 13, 2025\n* [https://www.reuters.com/article/us-gamestop-hot-shortbets/the-big-short-gamestop-effect-puts-global-bets-worth-billions-at-risk-idUSKBN29W1QA/](https://www.reuters.com/article/us-gamestop-hot-shortb",
+      "score": 3978,
+      "num_comments": 124,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1o5efqh/reuters_is_mass_updating_even_more_gamestop/",
+      "id": "1o5efqh",
+      "created_utc": 1760345312.0,
+      "flair": "\ud83d\udcf0 News",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Gme will spike up! Ban bet.",
+      "selftext": "Hi all im back for once and the last time.\n\nIve been buying more and more gme shares and patiently waiting.\nThe time has come when nobody is expecting a spike up it will.\n\nBan bet: if gme doesnt go to 100+ before 2026 ban me forever.\n\nEver heard about VOEX? No? Ask chatgpt.\nIt spiked to -5 voex 10 days before the 2021 squeeze.\n\nIt spiked to -5 voex 5 days before the 2024 requal.\n\nAnd not it spiked almost to -6 voex.. a few days before the 2025 squeeze? \n\nWe will see 100+ sooner than we think.\n70m shorted shares, 15 days + to cover and VOEX spiking. \n\nSet the money apart and enjoy retirement soon.\n\nIm not a financial advisor.",
+      "score": 3499,
+      "num_comments": 295,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1ocjx5i/gme_will_spike_up_ban_bet/",
+      "id": "1ocjx5i",
+      "created_utc": 1761069310.0,
+      "flair": "\ud83d\udcc8 Technical Analysis",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "\u201cIt happened during the worst financial crash in 80 years\u201d \ud83d\udc40 a crash + a merger = \ud83c\udf7b",
+      "selftext": "https://x.com/0xsweep/status/2036056626080395705?s=46 \n\nLink to the original tweet \n\nText limit Text limit Text limit Text limit Text limit",
+      "score": 3345,
+      "num_comments": 122,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1s1rwza/it_happened_during_the_worst_financial_crash_in/",
+      "id": "1s1rwza",
+      "created_utc": 1774296357.0,
+      "flair": "\ud83d\udcf3Social Media",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)",
+      "top_comments": []
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Guys, there is something happening in the market right now that I believe is a blueprint outlining exactly what GameStop is doing. And it's very exciting.",
+      "selftext": "Hey Apes!\n\nI'm really excited to make this post today. I believe there is something currently unfolding in the market that is nearly identical to what GameStop is doing/has been doing.\n\nI was watching CNBC this morning and they had a segment on Matt Halbower's Pentwater Capital Management and their AVIS position.\n\nFor those who are unaware, Avis is currently squeezing, and it's because of Pentwater's position that they just disclosed. Pentwater filed a Form 3 on 2/24 and the stock started squeezing 27 days later on 3/23.\n\nWhat stuck out to me was their use of total return swaps. Pentwater disclosed that they had exposure to \\~30% of Avis's stock just from cash-settled total return swaps alone. \n\nTotal return swaps are the main instrument that GameStop could be using to quietly accumulate a position in their target company without having to disclose it. \n\nAnd, they're a subset of derivative transactions.\n\nhttps://preview.redd.it/a870s37pe8ug1.png?width=1210&amp;format=png&amp;auto=webp&amp;s=107bc889702b1e4457514735fd691a75129ddd9c\n\n# I. Pentwater Building their Position in Avis\n\nPentwater's position in Avis has been built over the past year. Let's take a look at how they did that:\n\n*Note: AVIS has 35.325M shares outstanding*\n\n1. On 5/15/25 Pentwater filed a Schedule 13G disclosing a 6.8% position in Avis representing 2.39M shares, of which 70K were from call options. They crossed the 5% threshold on 3/31/25, which required them to file this 13G.\n2. On 8/14/25 Pentwater filed ",
+      "score": 3280,
+      "num_comments": 188,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1sh2x35/guys_there_is_something_happening_in_the_market/",
+      "id": "1sh2x35",
+      "created_utc": 1775770102.0,
+      "flair": "\ud83d\udcda Due Diligence",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Nothing like confirmation bias in the morning. Bullish",
+      "selftext": "There\u2019s a stock that\u2019s up 500%+ within the past month that is allegedly going through a short squeeze. The alleged squeeze isn\u2019t what caught my eye. It was the admission of \u201csynthetic ownership via swaps\u201d (read: \u201chidden short exposure routed through swaps\u201d). Not wrong. Early. Bullish\n\nEdit: Adding the article I got the post pic from\u2026 \n\n[https://finance.yahoo.com/markets/stocks/article/avis-stock-surges-again-bringing-monthly-gains-north-of-500-as-short-squeeze-risk-remains-high-134329023.html](https://finance.yahoo.com/markets/stocks/article/avis-stock-surges-again-bringing-monthly-gains-north-of-500-as-short-squeeze-risk-remains-high-134329023.html)",
+      "score": 3234,
+      "num_comments": 78,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1srp6an/nothing_like_confirmation_bias_in_the_morning/",
+      "id": "1srp6an",
+      "created_utc": 1776781426.0,
+      "flair": "\ud83d\udcf3Social Media",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "GameStop\u2019s Naked Short Showdown: Institutional Exposure, Margin Call Triggers, and Warrant-Induced Chaos in 2025",
+      "selftext": "**As shown by my data analysis this is going to cause margin calls spread across the board.**\n\nInstitutional Naked Short Interest, Margin Call Thresholds, and Adjusted Thresholds with Warrant Issuance Impact for GameStop (GME) as of September 20, 2025\n\nGameStop (GME) has a current price of $26.08 per share and reported short interest of 66.18 million shares (16.20% of 447 million share float) as of August 29, 2025, per SEC filings. Failures to deliver (FTDs) average 14,000 shares daily in August, totaling 500,000-1 million monthly, indicating persistent naked shorting. Total short exposure across institutions is estimated at 200-400 million shares (50-100% of float), with 50-70% synthetic/naked via total return swaps (TRS), dark pools (78% of trade volume), and ETF recycling (e.g., XRT, GMEU). Borrow fees are 0.52% annualized, masking synthetic positions.\n\nGameStop\u2019s special dividend of warrants, announced September 9, 2025, provides one warrant per ten shares held as of October 3, 2025, with distribution around October 7, 2025. Up to 59 million warrants will be issued, each exercisable at $32 per share until October 30, 2026. Shorts, especially naked/synthetic, must deliver equivalent entitlements to synthetic shareholders, requiring open-market purchases or cash-in-lieu settlements if shares are unavailable, potentially costing $3 billion at $50/share ($18 intrinsic warrant value, $1.062 billion total) or $4.012 billion at $100/share ($68 intrinsic). This increases margin p",
+      "score": 3201,
+      "num_comments": 240,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1nmedw0/gamestops_naked_short_showdown_institutional/",
+      "id": "1nmedw0",
+      "created_utc": 1758415480.0,
+      "flair": "\ud83d\udcda Possible DD",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Hear me out on the eBay dilution FUD. It\u2019s actually a massive bear trap.",
+      "selftext": "Holy fuck it\u2019s happening. I know a lot of people are looking at the press release and freaking out about the \"50% GameStop common stock\" part and screaming dilution. Just chill for a sec and look at the actual math of what my boi RC just did.\n\nThis isn't popcorn stock printing shares to pay off shitty debt and keep the lights on. RC is using stock to buy pure EBITDA. If we absorb eBay and RC slashes their bloated marketing budget by billions (like he said in the release), our earnings per share actually goes UP, not down. The pie gets sliced a bit more, but the pie itself just got like 5x bigger. It\u2019s accretive, not dilutive to our actual value.\n\nBut here is the real 4D chess move... think about how a 50% stock offer actually works.\n\nGameStop needs to come up with $28 Billion in stock to pay for the other half of eBay. If GME stays down here in the low 20s, RC has to print over a billion new shares to cover it. The big institutions holding eBay (Vanguard, BlackRock, etc) do NOT want a billion diluted shares.\n\nBut what happens if GME squeezes to $100? Or $500? RC only has to print a tiny fraction of shares to hit that $28 Billion mark.\n\nHe literally structured the buyout to weaponize the share price. The higher GME goes, the less dilution happens, and the better the deal is for the acquiring company. It puts the massive institutional longs on our side because they need the price to rocket to protect their payout.\n\nAlso, for anyone holding the physical warrants or the GME1 opti",
+      "score": 3199,
+      "num_comments": 310,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1t34rkq/hear_me_out_on_the_ebay_dilution_fud_its_actually/",
+      "id": "1t34rkq",
+      "created_utc": 1777861128.0,
+      "flair": "\ud83d\udde3 Discussion / Question",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "The jig is up.",
+      "selftext": "I haven't really seen anyone draw much attention to this, so figured it would be worth making a post dedicated to it. \n\nThe title of his substack article is very interesting. Especially when contrasted with its content. \n\nBurry says he believes there probably won't be a MOASS, naked shorting isn't really going on and he's invested for the sole purpose of seeing Gamestop grow over a long period of time. Now, we all know for legal reasons he can't say, 'I've bought GME, because there is going to be a short squeeze'\n\nYet, this mad man decided to title the post 'The jig is up'. Which is a phrase used to say deception or a nefarious scheme has been uncovered. Despite this title he makes no claims that there is any foul play going on with Gamestop.\n\nAll in all, this makes me feel very bullish. He's covering all his bases legally, yet seems to be hinting the deception is about to be uncovered.",
+      "score": 3185,
+      "num_comments": 190,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1qnvrov/the_jig_is_up/",
+      "id": "1qnvrov",
+      "created_utc": 1769467706.0,
+      "flair": "\ud83e\udd14 Speculation / Opinion",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "CVNA insiders dumping $500M+ right as index funds are FORCED to buy for S&amp;P inclusion. Your retirement account is their exit liquidity.",
+      "selftext": "I know, I know. Half of you got wiped out shorting this thing on the way up. The CVNA squeeze destroyed a lot of \ud83d\udc3b\ud83d\udc3b\ud83d\udc3b \n\nBut here's the thing - while we were getting margin called, the people actually running this company have been not so quietly [sprinting for the exits](http://openinsider.com/screener?s=CVNA&amp;o=&amp;pl=&amp;ph=&amp;ll=&amp;lh=&amp;fd=730&amp;fdr=&amp;td=0&amp;tdr=&amp;fdlyl=&amp;fdlyh=&amp;daysago=&amp;xp=1&amp;xs=1&amp;vl=&amp;vh=&amp;ocl=&amp;och=&amp;sic1=-1&amp;sicl=100&amp;sich=9999&amp;grp=0&amp;nfl=&amp;nfh=&amp;nil=&amp;nih=&amp;nol=&amp;noh=&amp;v2l=&amp;v2h=&amp;oc2l=&amp;oc2h=&amp;sortcol=0&amp;cnt=100&amp;page=1).\n\n**CEO Ernest Garcia III sells 10,000 shares EVERY. SINGLE. DAY.** $3-4M daily like clockwork.\n\nHis scam daddy dumped **$185M in ONE WEEK** in August. 100k shares per day, five days straight.\n\n**Just the last 2 weeks of December:**\n\n* Chief Product Officer: $35M\n* COO: $21M\n* CFO: $4.8M\n* Chief Brand Officer: $7.8M\n\n**Total insider sales last 6 months: $500M+**\n\n**Insider purchases last 2 years: $0.00**  \n\n\n\"BuT tHe S&amp;P 500 iNcLuSiOn\"\n\nYeah, about that. Index funds MUST buy before Dec 22. That's the forced buying you've been seeing. After that? It's done. No more passive flows propping this up.\n\nRemember Tesla's S&amp;P add in Dec 2020? Pumped to $900 on inclusion, then bled out 70% over the next two years. \n\nThe Garcias aren't stupid. They're dumping into the last wave of forced buyers while retail thinks inclusion = bullish.\n\nWh",
+      "score": 3112,
+      "num_comments": 399,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1pk5f30/cvna_insiders_dumping_500m_right_as_index_funds/",
+      "id": "1pk5f30",
+      "created_utc": 1765478717.0,
+      "flair": "Discussion",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Balls Deep in $OPEN. Someone Here Said It\u2019s Gonna Short Squeeze. I Know, I\u2019m Regarded.",
+      "selftext": "",
+      "score": 3102,
+      "num_comments": 822,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1m7df1j/balls_deep_in_open_someone_here_said_its_gonna/",
+      "id": "1m7df1j",
+      "created_utc": 1753286994.0,
+      "flair": "YOLO",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "AMD 310k Gain Porn",
+      "selftext": "I\u2019m just a regard with 300k richer today, going to flip this to 1M by 0dte SPY 669 what u think? \ud83e\udd14",
+      "score": 2922,
+      "num_comments": 178,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1nzjlvg/amd_310k_gain_porn/",
+      "id": "1nzjlvg",
+      "created_utc": 1759758616.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "RC Just gave retail the squeeze button. On easy mode.",
+      "selftext": "Apes valiantly tried to direct register all the shares in their favorite stock. While their effort was mighty, their progress plateaued at 25%. Many suspected reasons for why it topped out, but alas, it topped out. \n\nHowever, now, GME has issued 59 million warrants. When the price comes out tomorrow they're going to be roughly equivalent to an Oct 26 option contract, so roughly a $3 price right now. \n\nWell what just happened the night before they are priced? An email drops where you can register your warrants with GameStop &amp; ComputerShare directly. I am waiting for confirmation it is legit, but it sure seems to be. I believe this site will allow people to \"register\" their broker held warrants with computershare without having to DRS. I believe this will be a problem for brokers when sharesholders demand control numbers.\n\nThink of how cheap this is. Retail could literally buy ALL the warrants for $180 million. DFV could buy them ALL with his previous account size. Now there is a website where you register the warrants? So they can track every one? Obviously computershare is in on this situation, so we'll be able to DRS them too? \n\nARE YOU KIDDING ME. THE BOOK KING IS BACK. And he just made it SO attainable. $59 million warrants at $3 a piece. Insane. \n\nSo anyways, I'm going to be buying and DRSing a bunch of them. Wonder what happens when they're all direct registered? We;ve always wondered, but now have the opportunity to do it for a fraction of the price it would be on G",
+      "score": 2922,
+      "num_comments": 206,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1o11e1r/rc_just_gave_retail_the_squeeze_button_on_easy/",
+      "id": "1o11e1r",
+      "created_utc": 1759899024.0,
+      "flair": "\ud83e\udd14 Speculation / Opinion",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "Superstonk",
+      "title": "Ryan Cohen is trapping the shorts in a pincer move and will crush them to death in &lt; 6 quarters.",
+      "selftext": "GameStop has 1 billion authorized shares, which we the shareholders agreed to, and we will have to agree again to raise the ceiling.\n\nThey\u2019ve already issued ~447 million shares, BUT if you include convertible bonds, another ~128 million shares are potentially coming if/when they convert.\n\nThat leaves about 424 million shares left under the current authorization.\n\nNow think about this:\n\nWhat happens if the float is naked short over authorized AND GameStop fills up the rest of the authorized share limit with fresh capital from convertible bonds?\n\nHere\u2019s the pincer:\n\n\nArm 1: The Authorized Share Cap\n\n\u2022\tGameStop cannot issue more than 1 billion shares without shareholder approval.\n\n\u2022\tIf they hit that cap with new bonds, no more shares can be issued, including to cover shorts.\n\n\u2022\tNo ATM. No conversions. No locates. No escape.\n\n\nArm 2: The Bond Conversions\n\n\u2022\tThey\u2019ve already issued $3.75B in zero-coupon convertible bonds, representing ~128M shares at conversion.\n\n\u2022\tThey can, at current average conversion rates, issue another $12.48B in convertibles before hitting the 1B share cap.\n\n\u2022\tThat\u2019s $12.5B in balance sheet firepower while simultaneously sealing the door shut on any further share issuance.\n\n\u2022\tShorts are screwed on both ends: liquidity dries up, and available supply goes to zero.\n\nThe Trap: Dilution-Free Squeeze\n\n\u2022      Shorts assume dilution = price protection.\n\n\u2022      Cohen fills the authorized share bucket using debt instead of issuing more equity.\n\n\u2022      No more shares c",
+      "score": 2909,
+      "num_comments": 352,
+      "permalink": "https://reddit.com/r/Superstonk/comments/1ligfu2/ryan_cohen_is_trapping_the_shorts_in_a_pincer/",
+      "id": "1ligfu2",
+      "created_utc": 1750684892.0,
+      "flair": "\ud83e\udd14 Speculation / Opinion",
+      "source_reason": "deep squeeze theorycrafting (GME-centric, take with salt)"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Lost Over 200K in a trade",
+      "selftext": "Like many of you, I was playing the volatility on \ud83e\udd6d\u2019s war bullshit.  Managed to make over 200k from trading 0DTE options.  Was intended to withdraw it all that day, but decided to place one more trade before a work meeting.\n\nWork meeting went on longer than I anticipated, I even forgot that I had placed the trade. When i opened Robinhood, I was down over 120k.  My heart sank. I should\u2019ve stopped there, I don\u2019t know why I didn\u2019t.  I just sat there waiting for a reversal that never came. Only have about 5k to my name right now, except my retirement fund.\n\nI\u2019ve woken up in a cold sweat, I can\u2019t believe it\u2019s all gone.  I\u2019ll be okay, you play stupid games, you win stupid prizes.  I\u2019m going to take it all as a learning lesson, get some therapy, and try to get my shit together.\n\nSeriously, be sure to lock in your gains, because I didn\u2019t.  The numbers didn\u2019t feel real, I don\u2019t even know how to explain it. I wasn\u2019t disciplined enough to calm down, and think about things rationally.\n\nI\u2019ll use this as motivation to understand the value of a dollar again, and figure out how to recover.  I\u2019ll see you all in therapy boys!\n\nEdit: My total losses to date are 75k. I had turned 30k into 214k.",
+      "score": 2669,
+      "num_comments": 964,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1sa1n7j/lost_over_200k_in_a_trade/",
+      "id": "1sa1n7j",
+      "created_utc": 1775087798.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "I finally understand",
+      "selftext": "After a long while, doing options here and there. Betting on earnings and or random meme stocks from you regards, i settled on a consistent strategy to make money with options in the form of mitigating losses with 0Dte puts on spy.\n\nI only trade between 9:30 to 11:30am maybe 1pm, and look at the magnificant 7 as indicators for where the market may head in the short term. Using puts as loss mitigation. \n\nMaybe I'll get hosed eventually, but I finally feel confident in the strategy. Good luck out there.",
+      "score": 2491,
+      "num_comments": 391,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mkj7u2/i_finally_understand/",
+      "id": "1mkj7u2",
+      "created_utc": 1754619622.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "Daytrading",
+      "title": "I made $20,000 in August and $5000 so far in September. Here\u2019s my strategy.",
+      "selftext": "Only 15 trading days spent in August. 4 Trading days in September. The $8400 loss in the first image was from before I implemented my strategy. $7900 of it was from OPEN shares. Third picture is an example of how quickly I open and close a trade (and yes, I closed 1 contract instead of 100. Ended up closing the other 99 @.77)\n\t\t\n1) Core Idea\t(I trade mainly puts beginning of day because you can almost guarantee there will be profit takers on a bullish day and paper hands on a bearish day.)\n\t\u2022 \tWait 30 minutes after market opens before opening any trades.\n\t\u2022\tTrade SPY 0DTE options. \n\t\u2022\tAim: Quick scalps, 5 minutes or less when possible.\n\t\u2022\tMax hold: 20\u201330 minutes (hard cap).\n\t\u2022\tTarget: +15\u201330% gains on premium WHEN possible.\n\t\u2022\tStop: -50% loss on premium or invalidation of the setup. Take a break after a loss. \n\t\u2022\tMindset: We don\u2019t need to catch the giant moves, we aim for consistent wins with controlled risk (I have had many positions that 3x my position if I had held but hindsight is 20/20). \n\n\t\t\n\t\t\n2) Premarket Prep (Watch how market is behaving, understand what is moving the market today. Is there an announcement from the feds? Is one of the big 5s announcing earnings pre or post market?)\n\t\u2022\tMark levels:\n\t\t\u2022\tPrevious Day High (PDH) / Previous Day Low (PDL)\n\t\t\u2022\tPremarket High (PMH) / Premarket Low (PML)\n\t\t\u2022\tAdd VWAP at market open.\n\t\u2022\tScan for market movers:\n\t\t\u2022\tEconomic data (CPI, Jobs, Fed speakers, etc.)\n\t\t\u2022\tEarnings (especially big names in the S&amp;P)\n\t\t\u2022\tOvernight ne",
+      "score": 2247,
+      "num_comments": 401,
+      "permalink": "https://reddit.com/r/Daytrading/comments/1n8dxub/i_made_20000_in_august_and_5000_so_far_in/",
+      "id": "1n8dxub",
+      "created_utc": 1757001104.0,
+      "flair": "Strategy",
+      "source_reason": "broader intraday techniques (VWAP, ORB, levels)"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Bet everything but the house\u2026should I quit my job? 87.3k Loss SPY Puts.",
+      "selftext": "Well\u2026my vehicle broke (I\u2019m very mechanically inclined, parts are too expensive to fix it), lost the fianc\u00e9, lost my cat, lost my job (unemployed right now), and lost my life savings. More or less just YOLO\u2019d into a bunch of options because my fianc\u00e9 left me for another guy three weeks before the wedding. Worked out for a second. I was down to my last 4k then back up over 50k overnight! Then lost it on 0DTE puts on SPY when it just chopped three days in a row.\n\nOn the bright side, I don\u2019t have to pay rent or utilities since I live off grid in a small house I built with electric and well water! I didn\u2019t bet the vehicle or the house.\n\nI have about $800 left in my bank account. I plenty of meat in the freezer and cheese\u2026so I can make it about another two months. Job searching is rough lately, applied for just about everything I can think of with zero luck.\n\nMy deficit is settling tomorrow. I\u2019ll have like $50 in there\u2026how can I make $87,369? \ud83d\ude02\n\nFor the record, she left me when I had 60k in my bank account \ud83d\ude02",
+      "score": 2246,
+      "num_comments": 651,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1r31zzz/bet_everything_but_the_houseshould_i_quit_my_job/",
+      "id": "1r31zzz",
+      "created_utc": 1770922516.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$736k SPY 0DTE, it's been a good day",
+      "selftext": "",
+      "score": 1909,
+      "num_comments": 422,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1rvkbms/736k_spy_0dte_its_been_a_good_day/",
+      "id": "1rvkbms",
+      "created_utc": 1773691033.0,
+      "flair": "YOLO",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Welp. Back to square one.",
+      "selftext": "I think I'm done. Between me and my wife's account, overall loss several years of income playing options. At one point I was up nearly +$100k on my personal account. That was mostly with SPY, Nvda, and Tsla.  Then I started to bleed.  And tried to win the losses back. And then doubled down. And then tripled down. Sometime along the way, my account got permanently closed by RH (Can't even view my chart on that account anymore). Started playing on wife's after that.\n\nOriginally found out about options thanks to some news article mentioning this Sub and someone making tons on options. \nIn 2022 I sold 407 shares of Nvidia. That was before the 10-1 split. That's worth ~$750k now. Instead ... I'm now deep in the negative.\n\nHad some good plays, pretty spikes, went down to $200 within a week $200 -&gt; $28k, only to lose $27k the next day. Did a juicy SPY 0dte play last week, and then blew entire account next day on the 5th with yolo on spy calls, and then it tanked. Took 15 mins to wipe out the account. Got a little desperate and a little extra dumb.\n\nGot a decent job now, working 70-80hr weeks for OT. Opened a Webull (RH is too tempting to play options cuz that green/red gives a dopamine rush or something). Now I'll just be throwing a few grand a month on a SPY/Nvidia ect, and just let it do its thing. Some day/decade, I'll get that $160k+ back via slow growth I guess. It's been a fun run. Got addicted. Going full broke fixed that addiction I think. Time to give up on that \"get ric",
+      "score": 1859,
+      "num_comments": 526,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1rpg0mb/welp_back_to_square_one/",
+      "id": "1rpg0mb",
+      "created_utc": 1773097730.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "25K&gt;115K in 4 hrs",
+      "selftext": "SPX trends..No strategy.. 0dte\u2026 11 beers deep\n\nHookers and blow for the weekend",
+      "score": 1619,
+      "num_comments": 158,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1ry9ng8/25k115k_in_4_hrs/",
+      "id": "1ry9ng8",
+      "created_utc": 1773947889.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "I borrowed $5M to invest. Should I borrow more?",
+      "selftext": "Ironyman\u00a0[taught us box spreads](https://www.reddit.com/r/wallstreetbets/comments/ahy7dy/the_legend_of_1r0nyman/).  \nAdderalin\u00a0[showed us portfolio margin](https://www.reddit.com/r/wallstreetbets/comments/flhb0d/i_failed_my_portfolio_margin_call_final_damage/).  \nControlTheNarrative to\u00a0[keep our risk tolerance](https://www.reddit.com/r/wallstreetbets/comments/dpnzup/i_recorded_todays_marketopen_and_the_instant/?utm_source=share&amp;utm_medium=ios_app&amp;utm_name=iossmf)\u00a0in check.\n\n**These legends walked so we could run.**\n\nMy account crossed $2.1M, with +$1M in gains (+200% cumulative return):\n\n[Ending - Net Deposits = +$1M in gains](https://preview.redd.it/pd8n367oik6f1.png?width=1271&amp;format=png&amp;auto=webp&amp;s=cdd39c2a8fb173427f797f1702f98fee14157fde)\n\n\n\n[Blue is my account \\(+200&amp;#37;\\). Green is global stocks.](https://preview.redd.it/3qzs6x8qik6f1.png?width=1726&amp;format=png&amp;auto=webp&amp;s=70c72f7dfc39cab9ebb531a373f528ad83281b37)\n\nI am now borrowing $5M in box spreads to invest in $7M in assets with this $2.1M account.\u00a0**That is 3.3x leverage.**\u00a0I should borrow another million to invest (4x leverage) but I just took out a mortgage so I decided to be prudent and keep this debt at $5M.\n\nSummary:\n\n\\- Borrow 2-4x the value of your account on margin.\n\n\\- Dump it all in a multi-asset, diversified portfolio. For the stock sleeve, I prefer smart-beta funds due to their higher expected returns.\u00a0**The goal is maximum compound returns.**\n\n**It's the marriage of",
+      "score": 1575,
+      "num_comments": 981,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1l9z4yl/i_borrowed_5m_to_invest_should_i_borrow_more/",
+      "id": "1l9z4yl",
+      "created_utc": 1749765396.0,
+      "flair": "YOLO",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "A WHOLE CIVILIZATION OF BEARS WILL DIE TONIGHT, NEVER TO BE BROUGHT BACK AGAIN.\ud83d\udc3b\ud83d\udc3b\ud83d\udc3b\ud83d\udc3b\ud83d\udc3b",
+      "selftext": "https://preview.redd.it/1e08qlk59zzg1.png?width=3436&amp;format=png&amp;auto=webp&amp;s=48fde1ff7892951c85a66be908225510dfee07d4\n\nGather round, regards. Today we honor the brave souls who looked at SOXL ripping +12%, INTC pumping 25%, and NDQ on a $5K rally and said\u00a0*\"this is the top. it has to be. 27% on the Nasdaq in one month. AI bubble. memory is cyclical. THIS HAS TO BE THE TOP!!!\"*  \n  \nThey are not with us anymore. Their margin is gone. Their puts expired worthless. Their cost basis is a war crime  \n  \nF's in the comments for our fallen bears. \ud83d\udc3b\ud83d\udc3b\ud83d\udc3b\ud83d\udc3b\ud83d\udc3b  \n  \nPositions: $MU $300K calls on margin",
+      "score": 1422,
+      "num_comments": 148,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1t7kjjl/a_whole_civilization_of_bears_will_die_tonight/",
+      "id": "1t7kjjl",
+      "created_utc": 1778274035.0,
+      "flair": "Meme",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$3M on Unity - My DD for U",
+      "selftext": "**Position**\u00a0\u00a0\u00a0\u00a0\u00a0\n\n3000 call options for January 2026 with a 30 USD strike price; you can also see in my previous postings that I hadn\u2019t sold when we were at almost $40 and then when it went all the way down, I added to my Unity position.\u00a0\n\n  \n**Disclaimer**\n\nThis isn\u2019t financial advice. This is all just for your entertainment.\n\n**TLDR of the TLDR**\n\nUnity can do an AppLovin stock move if Unity\u2019s new AI-Powered ad Platform Vector succeeds. So far, Vector has \u201cfar exceeded our expectations\u201d according to the CEO Bromberg 1 week ago. My 1 year price target is $200. That would represent around half of AppLovin\u2019s current market cap; their main competitor in the ad space. Unity powers 70% of mobile games with their engine (Unity software is on 2.5 billion devices - you read that right, read it again and maybe one more time. This also includes the China market\u2026 ), but until Vector they haven\u2019t really capitalized on this potential moat. In the short-term gamma squeezes and even a short squeeze (9.28% shorted) are possible because various whales are buying OTM call options en masse and up to 88.26% of Unity is institutionally held and most positions have been made when the stock was over $100 (according to Fintel) which creates illiquidity as institutions likely won\u2019t want to sell a turn-around stock in a bull market when they are still in the minus. In other words, if you bet on Unity, you are riding together with the whales. And if you think gaming has a future and ads will play a r",
+      "score": 1346,
+      "num_comments": 357,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mp7nya/3m_on_unity_my_dd_for_u/",
+      "id": "1mp7nya",
+      "created_utc": 1755099148.0,
+      "flair": "DD",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "0DTE spy while you dummies are losing money on OPEN",
+      "selftext": "",
+      "score": 1222,
+      "num_comments": 140,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1m7gvhk/0dte_spy_while_you_dummies_are_losing_money_on/",
+      "id": "1m7gvhk",
+      "created_utc": 1753294831.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Look like the end for me. 172k loss.",
+      "selftext": "My 8 years of investing come back with holding NDVA at 122 on 2024 and sold at 187 (with a lot of margin). Then, I got some win with put 0DTE on Sep 2025 and get greedy. After that, lay off from Amazon got me desperate to make money and I loss more. My think now is just by stock and wait, can\u2019t do Option any more \ud83e\udd72",
+      "score": 1213,
+      "num_comments": 377,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1q0gh4j/look_like_the_end_for_me_172k_loss/",
+      "id": "1q0gh4j",
+      "created_utc": 1767197090.0,
+      "flair": "Loss",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$950-&gt;$24,500 in 3 trading weeks",
+      "selftext": "trading 0dte SPX options only full porting everyday.\nnew post including positions\nwithdrawing 20k tmrw\nlife changing money for this broke 21",
+      "score": 1173,
+      "num_comments": 210,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1ksulbl/95024500_in_3_trading_weeks/",
+      "id": "1ksulbl",
+      "created_utc": 1747930120.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$ROOT (ROOT) $37,000 YOLO",
+      "selftext": "Took another $30,000 AMEX LOAN and put the loan's entire amount in ROOT, $ROOT. Last time I took out a loan, it was for $PL and I ended up doubling my money. Either I am a true Autist, or $ROOT IS THE NEXT CVNA. I strongly believe that this name will get some traction in the coming week, and it makes sense to jump in early on it.\n\n$ROOT is a stock with major squeeze potential. It has made some rapid moves before in the past: from feb-march it ran from 100 to 180, from oct-nov it ran from 30 to 100. THIS NAME IS A CARBON COPY OF CVNA in terms of how the float exists (Majority of float tied up by institutions so the stock is hard to dump as the big whales never sell, and only 1.3 Bil mkt cap), along with $ROOT in the insurance services for cars and tech sector.\n\nAs the other 1.2M yolo regard posted, this name is undiscovered. Once the retail influx comes in, this name can run insane.\n\n  \nPositions: 123 contracts $ROOT 09/19 $100 CALLS at $2.09 per contract, 40 contracts $ROOT 10/17 $105 CALLS at $3.00 per contract",
+      "score": 1086,
+      "num_comments": 220,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mwb3xc/root_root_37000_yolo/",
+      "id": "1mwb3xc",
+      "created_utc": 1755783306.0,
+      "flair": "YOLO",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "$GOOGL | Reports of Search\u2019s Death Have Been Greatly Exaggerated, NEW ATH INCOMING",
+      "selftext": "Position: $200c 8/1 @ .64 a contract. Over 32,000 in OI and 35,000 in volume on Friday. Someone is betting for a squeeze. \n\nTHE DUE DILIGENCE:  \n\nEDIT: EU TRADE DEAL JUST ANNOUNCED, THIS IS A MULTIBAGGER NOW.\n\n\u2022 The market sits at record highs. Google closed Friday under 193 only seven percent below the 52 week high of 207.05.\n\n\u2022 Chart set l up looks clean. A cup and handle that began mid February already cleared the neckline. Last week was month end options expiration (an important date when market makers square their books) so the 195 pin made sense. Price paused at 195 and then fell under it because call open interest there was huge. Dealers pinned it with about 9.5 thousand contracts at that strike. Those contracts expired and the lid comes off.\n\n\u2022 $70 billion buyback cannon:\nIn April the board reloaded the repurchase program with another $70 billion. That\u2019s ~5 % of market cap sitting in the wings to sop up any weakness. \n\nQuiet period freeze out: Most U.S. companies, including Google, impose an internal \u201cblackout\u201d on discretionary buybacks that starts 2 to 4 weeks before quarter end and lasts through at least two full trading days after the earnings release. The gap lets any fresh information settle so repurchases don\u2019t look like insider trading. \n- Q2 numbers dropped Tuesday night, 23 July.\n- Add the standard two trading day buffer (Wed + Thu).\n- Friday, 26 July was the first \u201copen\u201d day when the $70 billion authorization could swing back to full size assuming no other m",
+      "score": 1002,
+      "num_comments": 211,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mapebj/googl_reports_of_searchs_death_have_been_greatly/",
+      "id": "1mapebj",
+      "created_utc": 1753630744.0,
+      "flair": "DD",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "From 2k to 20k",
+      "selftext": "I got so fucking lucky with these 0dte puts on QQQ. Positions in 2nd screenshot",
+      "score": 975,
+      "num_comments": 106,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1mvgiv4/from_2k_to_20k/",
+      "id": "1mvgiv4",
+      "created_utc": 1755700494.0,
+      "flair": "Gain",
+      "source_reason": "retail tactics + recent winners/losers"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "I prefer the backside when it comes to squeezes \ud83d\udc79\ud83e\udef0\ud83c\udffc\ud83c\udf51",
+      "selftext": "When I saw that $CAR was squeezing for so long, I wondered why people weren't talking about the other side of it, that it would fall for days after it reached the top. I didn't see any reason why not to play it other than losing all my investment money. I didn't catch the first phase, but I bought puts OTM expecting it to crash similarly one day to the next until it became rationally priced. I wish I caught the first phase but I'm so glad to have my first 10 bagger. Also, had a horrible customer experience with Avis once and never again \ud83d\udc79\ud83c\udfbb\ud83d\ude3e This is not investment advice \ud83e\udd72",
+      "score": 928,
+      "num_comments": 126,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1stzcfi/i_prefer_the_backside_when_it_comes_to_squeezes/",
+      "id": "1stzcfi",
+      "created_utc": 1776987915.0,
+      "flair": "Gain",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    },
+    {
+      "subreddit": "Daytrading",
+      "title": "Started in September, it\u2019s been a great time for me, all from SPY 0dte",
+      "selftext": "Don\u2019t worry, I\u2019ve stopped lol. I\u2019m writing covered calls and holding shares. I was making some insane plays in SPY 0dte, I\u2019ve attached the last trade I did which sealed it all. I\u2019m done with 0dte and I\u2019ve taken more keen to writing covered calls. I\u2019m bringing I. $3000-$6000 every week from writing covered calls. Hope the market still stays up so I can continue.\n\nIf anyone I curious how I did it here\u2019s how.\n\nI would look at pre market\nI would keep NVDA on the side and see how it would trade daily, if NVDA was trading up or down that would SOMETIMES tell me if I would buy calls or puts\nI would also look for VWAP bounce, it had a really good success rate for me but wasn\u2019t foolproof. \nI wouldn\u2019t sell out of my position unless I saw specific candles which usually lead to a great exit.",
+      "score": 883,
+      "num_comments": 218,
+      "permalink": "https://reddit.com/r/Daytrading/comments/1pa53sv/started_in_september_its_been_a_great_time_for_me/",
+      "id": "1pa53sv",
+      "created_utc": 1764464640.0,
+      "flair": "P&amp;L - Provide Context",
+      "source_reason": "broader intraday techniques (VWAP, ORB, levels)"
+    },
+    {
+      "subreddit": "thetagang",
+      "title": "I call this piece \u201cPennies in Front of a Steamroller\u201d",
+      "selftext": "I am a degenerate 0DTE credit spread seller on QQQ and that \u201csteamroll\u201d happened back on April 9 during the crazy tariff talks. Feels so good and easy to keep picking up money until that fateful steamroller eventually catches up to ya. But I didn\u2019t learn my lesson and I am still going. oops",
+      "score": 871,
+      "num_comments": 115,
+      "permalink": "https://reddit.com/r/thetagang/comments/1nphgjr/i_call_this_piece_pennies_in_front_of_a/",
+      "id": "1nphgjr",
+      "created_utc": 1758732781.0,
+      "flair": null,
+      "source_reason": "premium-seller perspective on 0DTE \u2014 counterpoint to long-only"
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "title": "Quantum Computing Inc $QUBT fraud",
+      "selftext": "**Reposted with positions. Mods removed it because it had no positions (I replied with my positions to a comment asking for them).**\n\nMy background: I'm a graduate student and researcher in quantum complexity theory. I'm not a hardware engineer, but I do follow developments in quantum hardware closely. Based on my analysis, I have serious concerns that QUBT\u2019s claims may amount to fraud.\n\n[Positions](https://i.imgur.com/cxvZaJa.jpeg). I fully believe that the stock of this [beverage-company-turned-quantum-computing](https://i.imgur.com/Ndz0r8p.png) should go to $0 (or close to it) and it is only a matter of time before it does.\n\nI will split this post into a few parts. First, we will review their fundamentals. Then, we will look into their future claims. Finally, we will review any contracts and future prospects.\n\n**1)** **Fundamentals.** The market cap of QUBT is $3.73 billion and for the three-month period ending June 30, 2025, QUBT reported revenues of $61,000 (yes, you read that right), a decrease from the $183,000 generated in the same quarter of the previous year. They do not have a P/E ratio, as they are unprofitable (you could think that their P/E ratio is high and negative). This means that they have an enterprise value of roughly $3.38 billion which comes almost entirely from their market cap and with a revenue of $263k, their EV/revenue ratio is 12.870. To put it into perspective how extreme that is: \n\n\nCompany | Enterprise Value/Revenue\n-------|--------------------",
+      "score": 739,
+      "num_comments": 312,
+      "permalink": "https://reddit.com/r/wallstreetbets/comments/1ofsrr8/quantum_computing_inc_qubt_fraud/",
+      "id": "1ofsrr8",
+      "created_utc": 1761402116.0,
+      "flair": "DD",
+      "source_reason": "squeeze-hunting tactics from the source community"
+    }
+  ],
+  "harvest": {
+    "n_in_corpus": 60
+  }
+}

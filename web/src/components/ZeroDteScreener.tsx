@@ -6,6 +6,7 @@ const BLOCKED_COPY: Record<string, string> = {
   closed: "US equity market is closed. 0DTE chains only refresh during RTH.",
   pre_open: "Pre-market. The 0DTE screener wakes up after the 9:30a ET open.",
   auction_noise: "Inside the opening-auction window. Quotes are unstable until 9:45a ET.",
+  midday_chop: "After 1:00p ET — Reddit-corpus consensus: 0DTE edge concentrates in the first 2-3 hours. Midday is chop where theta dominates.",
   theta_cliff: "After 3:30p ET — theta dominates the last 30 min. Screener is parked.",
 };
 

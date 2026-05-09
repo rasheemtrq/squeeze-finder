@@ -136,10 +136,13 @@ def _parse_form4_xml(xml_text: str) -> dict | None:
     footnote_blob = " ".join((fn.text or "") for fn in root.iter("footnote")).lower()
     is_10b5_1 = "10b5-1" in footnote_blob
 
+    # Collect both purchases (P) and open-market sales (S). Sells are needed
+    # for the insider-dumping red flag: insiders cashing out into a squeeze
+    # is a textbook end-of-move signal that Reddit recurringly highlighted.
     transactions: list[dict] = []
     for tx in root.iter("nonDerivativeTransaction"):
         code = (tx.findtext("transactionCoding/transactionCode") or "").strip()
-        if code != "P":
+        if code not in ("P", "S"):
             continue
         try:
             shares = float(tx.findtext("transactionAmounts/transactionShares/value") or 0)
@@ -151,6 +154,7 @@ def _parse_form4_xml(xml_text: str) -> dict | None:
         tx_date = tx.findtext("transactionDate/value") or ""
         transactions.append({
             "date": tx_date,
+            "code": code,
             "shares": shares,
             "price": round(price, 4),
             "value": round(shares * price, 2),
@@ -212,9 +216,10 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS_DEFAULT, force_refresh
                     parsed.append(r)
 
     purchases: list[dict] = []
+    sales: list[dict] = []
     for filing in parsed:
         for tx in filing["transactions"]:
-            purchases.append({
+            entry = {
                 "date": tx["date"],
                 "owner": filing["owner_name"],
                 "is_director": filing["is_director"],
@@ -224,46 +229,71 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS_DEFAULT, force_refresh
                 "price": tx["price"],
                 "value": tx["value"],
                 "filing_date": filing["filing_date"],
-            })
-    purchases.sort(key=lambda p: p["date"], reverse=True)
-
-    total_value = round(sum(p["value"] for p in purchases), 2)
-    total_shares = round(sum(p["shares"] for p in purchases), 0)
-    distinct_insiders = len({p["owner"] for p in purchases if p["owner"]})
-
-    # Cluster signal: 3+ distinct insiders buying within any 14-day window.
-    # Strong contrarian-bullish in conjunction with high SI.
-    cluster = False
-    if distinct_insiders >= 3 and purchases:
-        dates_by_owner: dict[str, list[date]] = {}
-        for p in purchases:
-            try:
-                d = date.fromisoformat(p["date"])
-            except ValueError:
-                continue
-            dates_by_owner.setdefault(p["owner"], []).append(d)
-        all_dates = sorted({d for ds in dates_by_owner.values() for d in ds})
-        for anchor in all_dates:
-            window_end = anchor + timedelta(days=14)
-            owners_in_window = {
-                o for o, ds in dates_by_owner.items()
-                if any(anchor <= d <= window_end for d in ds)
             }
-            if len(owners_in_window) >= 3:
-                cluster = True
-                break
+            if tx.get("code") == "P":
+                purchases.append(entry)
+            elif tx.get("code") == "S":
+                sales.append(entry)
+    purchases.sort(key=lambda p: p["date"], reverse=True)
+    sales.sort(key=lambda p: p["date"], reverse=True)
+
+    total_buy_value = round(sum(p["value"] for p in purchases), 2)
+    total_buy_shares = round(sum(p["shares"] for p in purchases), 0)
+    distinct_buyers = len({p["owner"] for p in purchases if p["owner"]})
+
+    total_sell_value = round(sum(s["value"] for s in sales), 2)
+    total_sell_shares = round(sum(s["shares"] for s in sales), 0)
+    distinct_sellers = len({s["owner"] for s in sales if s["owner"]})
+
+    # Cluster-buy signal: 3+ distinct insiders buying within any 14-day
+    # window. Strong contrarian-bullish in conjunction with high SI.
+    cluster_buying = _cluster_window(purchases, min_owners=3, days=14)
+    # Cluster-sell signal: same logic on the sell side. Reddit-corpus
+    # consensus: insiders dumping into a squeeze is a recurring end-of-move
+    # pattern. Treated as a red flag downstream.
+    cluster_selling = _cluster_window(sales, min_owners=3, days=14)
 
     result = {
         "ticker": ticker,
         "cik": cik,
         "as_of": datetime.now(UTC).isoformat(),
         "lookback_days": lookback_days,
-        "total_buy_value_usd": total_value,
-        "total_buy_shares": total_shares,
-        "distinct_insiders": distinct_insiders,
-        "cluster_buying": cluster,
+        "total_buy_value_usd": total_buy_value,
+        "total_buy_shares": total_buy_shares,
+        "distinct_insiders": distinct_buyers,  # legacy alias for buyers
+        "distinct_buyers": distinct_buyers,
+        "cluster_buying": cluster_buying,
+        "total_sell_value_usd": total_sell_value,
+        "total_sell_shares": total_sell_shares,
+        "distinct_sellers": distinct_sellers,
+        "cluster_selling": cluster_selling,
         "filings_seen": len(filings),
         "purchases": purchases[:25],
+        "sales": sales[:25],
     }
     _cache.put("insiders", cache_key, result)
     return result
+
+
+def _cluster_window(events: list[dict], min_owners: int, days: int) -> bool:
+    """True if `min_owners` distinct owners had events in any `days`-day window."""
+    if len({e["owner"] for e in events if e.get("owner")}) < min_owners:
+        return False
+    by_owner: dict[str, list[date]] = {}
+    for e in events:
+        try:
+            d = date.fromisoformat(e["date"])
+        except ValueError:
+            continue
+        if e.get("owner"):
+            by_owner.setdefault(e["owner"], []).append(d)
+    all_dates = sorted({d for ds in by_owner.values() for d in ds})
+    for anchor in all_dates:
+        window_end = anchor + timedelta(days=days)
+        owners_in_window = {
+            o for o, ds in by_owner.items()
+            if any(anchor <= d <= window_end for d in ds)
+        }
+        if len(owners_in_window) >= min_owners:
+            return True
+    return False

@@ -14,7 +14,8 @@ export default function ZeroDtePage() {
         <p className="text-[var(--muted)] text-sm max-w-2xl">
           Same-day-expiry calls and puts on major-index ETFs and the most-liquid
           mega-caps, ranked by realistic 2x / 5x / 10x payoff probability under
-          IV-implied move distribution. Active during RTH 9:45a&ndash;3:30p ET only.
+          IV-implied move distribution. Active during RTH 9:45a&ndash;1:00p ET only
+          &mdash; midday and afternoon are mostly chop where theta dominates.
         </p>
       </div>
 

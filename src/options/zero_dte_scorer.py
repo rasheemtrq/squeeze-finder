@@ -303,6 +303,28 @@ def rank(chain: dict[str, Any], top_per_side: int = 3) -> dict[str, Any]:
     }
 
 
+def _earnings_within(ticker: str, days: int = 1) -> bool:
+    """True if ticker reports earnings today or within `days` calendar days.
+
+    Reddit-corpus consensus: holding 0DTE through earnings is a recurring
+    catastrophic-loss pattern — IV crush + gap risk both work against you.
+    Soft-fail to False if Finnhub is unavailable (don't block the screener
+    on a data outage).
+    """
+    try:
+        from src.data.catalysts import fetch as catalysts_fetch
+        cat = catalysts_fetch(ticker)
+    except Exception:
+        return False
+    if not cat:
+        return False
+    next_event = cat.get("next_event") or {}
+    if (next_event.get("kind") or "").lower() != "earnings":
+        return False
+    dte = cat.get("days_to_event")
+    return dte is not None and dte <= days
+
+
 def screen_universe(top_per_side: int = 3, force_refresh: bool = False) -> dict[str, Any]:
     """End-to-end: gate on market hours, fetch all 0DTE chains, rank each."""
     from src.data.zero_dte import ZERO_DTE_UNIVERSE, fetch_universe
@@ -321,7 +343,13 @@ def screen_universe(top_per_side: int = 3, force_refresh: bool = False) -> dict[
 
     bundle = fetch_universe(force_refresh=force_refresh)
     results: list[dict] = []
-    for chain in bundle["chains"].values():
+    excluded_earnings: list[str] = []
+    for ticker, chain in bundle["chains"].items():
+        # Earnings-day exclusion — drop tickers reporting today or tomorrow.
+        # IV crush + overnight gap both shred 0DTE setups.
+        if _earnings_within(ticker, days=1):
+            excluded_earnings.append(ticker)
+            continue
         ranked = rank(chain, top_per_side=top_per_side)
         if ranked["calls"] or ranked["puts"]:
             results.append(ranked)
@@ -339,6 +367,7 @@ def screen_universe(top_per_side: int = 3, force_refresh: bool = False) -> dict[
         "expiry": bundle["expiry"],
         "universe": ZERO_DTE_UNIVERSE,
         "errors": bundle.get("errors", {}),
+        "excluded_earnings": excluded_earnings,
         "filters": {
             "min_open_interest": MIN_OI,
             "min_volume": MIN_VOLUME,

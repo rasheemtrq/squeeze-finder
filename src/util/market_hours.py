@@ -17,7 +17,10 @@ ET = ZoneInfo("America/New_York")
 OPEN_TIME = time(9, 30)
 CLOSE_TIME = time(16, 0)
 SCREENER_OPEN_TIME = time(9, 45)
-SCREENER_CLOSE_TIME = time(15, 30)
+# Reddit-corpus consensus across r/options + r/Daytrading: 0DTE edge concentrates
+# in the first 2-3 hours after open. Midday and afternoon are mostly chop where
+# theta dominates and directional moves get faded. Tightened from 15:30 to 13:00.
+SCREENER_CLOSE_TIME = time(13, 0)
 
 # 2025-2026 US market holidays (NYSE). Update annually.
 HOLIDAYS = {
@@ -53,7 +56,7 @@ def is_market_open(now: datetime | None = None) -> bool:
 def is_screener_window(now: datetime | None = None) -> tuple[bool, str | None]:
     """Return (allowed, reason_when_blocked).
 
-    Reasons: 'closed', 'pre_open', 'auction_noise', 'theta_cliff'.
+    Reasons: 'closed', 'pre_open', 'auction_noise', 'midday_chop'.
     """
     n = now or now_et()
     if not is_trading_day(n.date()):
@@ -64,7 +67,7 @@ def is_screener_window(now: datetime | None = None) -> tuple[bool, str | None]:
     if t < SCREENER_OPEN_TIME:
         return False, "auction_noise"
     if t >= SCREENER_CLOSE_TIME and t < CLOSE_TIME:
-        return False, "theta_cliff"
+        return False, "midday_chop"
     if t >= CLOSE_TIME:
         return False, "closed"
     return True, None

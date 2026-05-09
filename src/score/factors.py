@@ -323,17 +323,27 @@ def score_si(
         finra_component = max(0, min(33, finra_component))
 
     # Insider open-market buying — contrarian bullish, scaled by total $ value
-    # and amplified for cluster buying (3+ insiders within 14d).
+    # and amplified for cluster buying (3+ insiders within 14d). Insider
+    # SELLING is a separate red flag handled below: it doesn't reduce the buy
+    # component (we keep both signals distinct) but emits a dumping demote
+    # when the sell side dominates.
     insider_component = 0.0
     insider_info: dict = {}
+    insider_dump_demote = 0.0
     if insiders:
         total_value = insiders.get("total_buy_value_usd") or 0
         distinct = insiders.get("distinct_insiders") or 0
         cluster = bool(insiders.get("cluster_buying"))
+        sell_value = insiders.get("total_sell_value_usd") or 0
+        sell_distinct = insiders.get("distinct_sellers") or 0
+        sell_cluster = bool(insiders.get("cluster_selling"))
         insider_info = {
             "insider_buy_value_usd": total_value,
             "insider_distinct_buyers": distinct,
             "insider_cluster": cluster,
+            "insider_sell_value_usd": sell_value,
+            "insider_distinct_sellers": sell_distinct,
+            "insider_cluster_selling": sell_cluster,
         }
         # $250k = 5 pts, $1M = 10 pts, $5M+ = full 15.
         if total_value >= 250_000:
@@ -348,6 +358,20 @@ def score_si(
         # scale by the structural SI signal so it amplifies rather than substitutes.
         si_amplifier = min(1.0, max(si_pct, 0) / 0.10) if si_pct else 0.3
         insider_component *= si_amplifier
+
+        # Insider-dumping demote (Reddit-corpus signal: insiders cashing out
+        # into a squeeze is a recurring end-of-move pattern). Triggers on
+        # cluster-selling OR $5M+ in net sales (sells > 2x buys), gated on
+        # an actual SI signal so we don't penalize routine post-vest sales
+        # at non-shorted names.
+        net_sells = sell_value - total_value
+        if (
+            (sell_cluster or net_sells >= 5_000_000)
+            and sell_distinct >= 2
+            and (si_pct or 0) >= 0.10
+        ):
+            # Bigger demote for the cluster pattern; smaller for raw $ size.
+            insider_dump_demote = 15 if sell_cluster else 8
 
     # Float-aware multiplier — empirically validated by the historical-squeeze
     # backtest: every name we missed in the partial replay (KOSS, SPRT, HKD,
@@ -371,7 +395,7 @@ def score_si(
             float_mult = 1.20
         elif float_shares < 50_000_000:
             float_mult = 1.10
-    score = _clip(raw_si_score * float_mult)
+    score = _clip(raw_si_score * float_mult - insider_dump_demote)
 
     stale = False
     si_age_days: int | None = None
@@ -405,6 +429,10 @@ def score_si(
         flag = "insider_cluster_buying"
     elif (insider_info.get("insider_buy_value_usd") or 0) >= 1_000_000 and si_pct and si_pct >= 0.15:
         flag = "insider_buying"
+    # Insider dumping overrides the bullish flags — Reddit-corpus signal that
+    # the squeeze window is closing. Promote so it isn't masked by other flags.
+    if insider_dump_demote >= 8:
+        flag = "insiders_dumping"
     # Tiny float on a real SI signal — the textbook small-float squeeze setup.
     # Promote over the structural-only flags since float dominates squeeze
     # mechanics on this scale.
