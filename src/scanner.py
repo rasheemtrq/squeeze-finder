@@ -15,6 +15,7 @@ from src.data import (
     finra,
     fundamentals,
     insiders,
+    inst_holders,
     options,
     prices,
     stocktwits,
@@ -47,6 +48,7 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
         "apewisdom": lambda: apewisdom.fetch(ticker),
         "insiders": lambda: insiders.fetch(ticker),
         "dilution": lambda: dilution.fetch(ticker),
+        "inst_holders": lambda: inst_holders.fetch(ticker),
     }
     for name, fn in sources.items():
         try:

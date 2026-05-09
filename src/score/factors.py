@@ -275,13 +275,15 @@ def score_si(
     fund: dict | None,
     finra: dict | None = None,
     insiders: dict | None = None,
+    inst_holders: dict | None = None,
 ) -> tuple[float, dict]:
     """
     Combines structural SI (yf: % float, DTC) with FINRA daily short-volume
-    momentum (trend + latest ratio), and adds an insider-buying contrarian
-    bonus from SEC Form 4. Insider open-market purchases by directors /
-    officers / 10%-owners on a heavily-shorted name is the textbook squeeze
-    precondition: insiders see the borrow + know shorts are wrong.
+    momentum (trend + latest ratio), an insider-buying contrarian bonus from
+    SEC Form 4, and a 13D/13G institutional-holder lift. Insider open-market
+    purchases by directors / officers / 10%-owners on a heavily-shorted name
+    is the textbook squeeze precondition; a fresh 13D filing (5%+ activist)
+    is the institutional-scale version of the same signal.
     """
     if not fund:
         return 0.0, {"reason": "no_data"}
@@ -385,7 +387,41 @@ def score_si(
     #   >=200M float -> 1.00x   (large, no boost)
     # Only applies when there's a real SI signal to amplify (avoids inflating
     # randomly-thin floats that aren't being shorted).
-    raw_si_score = pct_component + dtc_component + finra_component + insider_component
+    # Institutional 13D/13G — a fresh activist 5%+ stake on a heavily-shorted
+    # name puts shorts on the clock. Reddit-corpus pattern: Pentwater 13D on
+    # AVIS preceded the squeeze by 27 days. 13D (active) is materially
+    # stronger than 13G (passive); we weight accordingly. Recency-decay so a
+    # 90-day-old filing carries less weight than a 7-day-old one.
+    inst_component = 0.0
+    inst_info: dict = {}
+    if inst_holders:
+        n_active = inst_holders.get("n_active") or 0
+        n_passive = inst_holders.get("n_passive") or 0
+        days_since = inst_holders.get("days_since_most_recent")
+        inst_info = {
+            "inst_active_filings": n_active,
+            "inst_passive_filings": n_passive,
+            "inst_most_recent": inst_holders.get("most_recent"),
+            "inst_days_since": days_since,
+        }
+        if n_active or n_passive:
+            base = 8.0 * min(n_active, 2) + 3.0 * min(n_passive, 2)  # max 22
+            recency_mult = 1.0
+            if days_since is not None:
+                # 0-7d: 1.0x, 8-30d: 0.7x, 31-60d: 0.4x, 61-90d: 0.2x
+                if days_since <= 7:
+                    recency_mult = 1.0
+                elif days_since <= 30:
+                    recency_mult = 0.7
+                elif days_since <= 60:
+                    recency_mult = 0.4
+                else:
+                    recency_mult = 0.2
+            inst_component = min(15.0, base * recency_mult)
+
+    raw_si_score = (
+        pct_component + dtc_component + finra_component + insider_component + inst_component
+    )
     float_shares = fund.get("float_shares") or 0
     float_mult = 1.0
     if float_shares > 0 and raw_si_score >= 30:
@@ -429,8 +465,17 @@ def score_si(
         flag = "insider_cluster_buying"
     elif (insider_info.get("insider_buy_value_usd") or 0) >= 1_000_000 and si_pct and si_pct >= 0.15:
         flag = "insider_buying"
-    # Insider dumping overrides the bullish flags — Reddit-corpus signal that
-    # the squeeze window is closing. Promote so it isn't masked by other flags.
+    # Activist 13D filing recently + meaningful SI = institutional-scale
+    # version of insider buying. Promote over generic flags; the Reddit
+    # corpus highlighted this as the highest-conviction setup.
+    if (
+        (inst_info.get("inst_active_filings") or 0) >= 1
+        and (inst_info.get("inst_days_since") or 999) <= 30
+        and si_pct and si_pct >= 0.10
+    ):
+        flag = "activist_filed"
+    # Insider dumping overrides everything bullish — Reddit-corpus signal
+    # that the squeeze window is closing.
     if insider_dump_demote >= 8:
         flag = "insiders_dumping"
     # Tiny float on a real SI signal — the textbook small-float squeeze setup.
@@ -455,6 +500,7 @@ def score_si(
         "float_mult": round(float_mult, 2),
         **finra_info,
         **insider_info,
+        **inst_info,
         "flag": flag,
     }
 
@@ -581,7 +627,10 @@ def compute_all(bundle: dict[str, Any]) -> dict[str, Any]:
     s_sent, sig_sent = score_sentiment(bundle.get("stocktwits"), bundle.get("apewisdom"))
     s_opt, sig_opt = score_options(bundle.get("options"), bundle.get("prices"))
     s_si, sig_si = score_si(
-        bundle.get("fundamentals"), bundle.get("finra"), bundle.get("insiders")
+        bundle.get("fundamentals"),
+        bundle.get("finra"),
+        bundle.get("insiders"),
+        bundle.get("inst_holders"),
     )
     s_ta, sig_ta = score_ta(bundle.get("prices"))
     s_cat, sig_cat = score_catalyst(bundle.get("catalysts"))
