@@ -217,6 +217,85 @@ def generate_zero_dte_narrative(facts: dict) -> dict:
     raise OpenRouterError(f"0DTE narrative generation failed; last: {last_error}")
 
 
+SYSTEM_QUICKTAKE = (
+    "You are a tactical squeeze-trading analyst. Given a JSON facts block "
+    "about a single ticker, return strict JSON with exactly this shape:\n"
+    '  {"take": "<one sentence, ≤30 words>"}\n'
+    "Rules:\n"
+    "- ONE sentence describing the current setup in tactical terms.\n"
+    "- Lead with the strongest signal (the highest-scoring factor or most-"
+    "informative flag).\n"
+    "- End with the biggest risk or invalidator (a flag prefixed with risk:, "
+    "or what would kill the thesis).\n"
+    "- Use ONLY numbers/flags in the facts block. Do not invent prices or "
+    "targets.\n"
+    "- No price targets. No timing predictions beyond named events.\n"
+    "- Return ONLY the JSON object, no prose, no markdown."
+)
+
+
+def _call_quicktake(model: str, facts_json: str, timeout: float = 25) -> dict | None:
+    if not OPENROUTER_API_KEY:
+        raise OpenRouterError("OPENROUTER_API_KEY not set")
+    r = httpx.post(
+        URL,
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "squeeze-finder/quicktake",
+        },
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_QUICKTAKE},
+                {"role": "user", "content": facts_json},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 120,
+            "response_format": {"type": "json_object"},
+        },
+        timeout=timeout,
+    )
+    r.raise_for_status()
+    return _extract_json(r.json()["choices"][0]["message"]["content"])
+
+
+def generate_quicktake(facts: dict) -> dict:
+    """One-sentence Haiku take. ~$0.001/call, ~2s latency."""
+    facts_json = json.dumps(facts, default=str, indent=2)
+    last_error = None
+    for model in MODELS:
+        try:
+            raw = _call_quicktake(model, facts_json)
+        except httpx.HTTPStatusError as e:
+            last_error = f"{model}: http {e.response.status_code} {e.response.text[:200]}"
+            continue
+        except Exception as e:
+            last_error = f"{model}: {e}"
+            continue
+        if isinstance(raw, dict) and isinstance(raw.get("take"), str) and raw["take"].strip():
+            return {"take": raw["take"].strip(), "model_used": model}
+        last_error = f"{model}: invalid response shape"
+    raise OpenRouterError(f"quicktake generation failed; last: {last_error}")
+
+
+def facts_block_quicktake(ticker_result: dict) -> dict:
+    """Slim facts block for the per-row quicktake — just enough for one sentence."""
+    f = ticker_result.get("factors") or {}
+    return {
+        "ticker": ticker_result["ticker"],
+        "name": ticker_result.get("name"),
+        "price": ticker_result.get("price"),
+        "composite_score": ticker_result["score"],
+        "factors": {
+            k: {"score": (f.get(k) or {}).get("score"), "flag": (f.get(k) or {}).get("signals", {}).get("flag")}
+            for k in ("sentiment", "options", "si", "ta", "catalyst")
+        },
+        "flags": ticker_result.get("flags", []),
+    }
+
+
 def facts_block_zero_dte(ranked: dict, regime: dict | None = None) -> dict:
     """Compact facts block for one ticker's 0DTE chain. Strips noisy fields."""
     def _slim(c: dict) -> dict:

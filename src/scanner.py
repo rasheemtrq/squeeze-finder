@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import hashlib
 import json
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,7 +30,15 @@ from src.score.backtest import record_snapshot
 from src.score.composite import collect_flags, composite, is_red_flag
 from src.score.factors import compute_all
 
-SCAN_CACHE_TTL = 120  # seconds — serve the same scan config from disk cache
+SCAN_CACHE_FRESH_TTL = 600   # 10 min — under this age, served as fresh, no refresh
+SCAN_CACHE_MAX_AGE = 3600    # 1 hour — beyond this, treat as missing and full-refetch
+# Stale-while-revalidate: between FRESH_TTL and MAX_AGE, serve cached value
+# instantly AND fire a background refresh. User never waits for a cold scan.
+
+# In-flight refresh dedupe so simultaneous stale hits don't fire N parallel
+# scans against the same cache key.
+_in_flight_refreshes: set[str] = set()
+_in_flight_lock = threading.Lock()
 
 
 def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
@@ -108,6 +117,25 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
     }
 
 
+def _maybe_refresh_in_background(cache_key: str, **scan_kwargs: Any) -> None:
+    """Fire a background scan refresh, deduped per cache_key."""
+    with _in_flight_lock:
+        if cache_key in _in_flight_refreshes:
+            return
+        _in_flight_refreshes.add(cache_key)
+
+    def _run() -> None:
+        try:
+            scan(force_refresh=True, **scan_kwargs)
+        except Exception:
+            pass
+        finally:
+            with _in_flight_lock:
+                _in_flight_refreshes.discard(cache_key)
+
+    threading.Thread(target=_run, daemon=True, name=f"scan-refresh-{cache_key}").start()
+
+
 def scan(
     tickers: list[str] | None = None,
     weights: dict | None = None,
@@ -135,11 +163,29 @@ def scan(
             sort_keys=True,
         ).encode()
     ).hexdigest()[:16]
+
     if not force_refresh:
-        cached = _cache.get("scans", cache_key, SCAN_CACHE_TTL)
-        if cached:
-            cached["cached"] = True
-            return cached
+        # Stale-while-revalidate: serve any cached value newer than MAX_AGE
+        # immediately. If older than FRESH_TTL, fire a background refresh
+        # (deduped via _in_flight_refreshes) so the next request gets fresh.
+        age = _cache.age_seconds("scans", cache_key)
+        if age is not None and age < SCAN_CACHE_MAX_AGE:
+            cached = _cache.get("scans", cache_key, SCAN_CACHE_MAX_AGE)
+            if cached:
+                cached["cached"] = True
+                cached["cache_age_seconds"] = round(age, 1)
+                cached["cache_stale"] = age > SCAN_CACHE_FRESH_TTL
+                if cached["cache_stale"]:
+                    _maybe_refresh_in_background(
+                        cache_key,
+                        tickers=tickers,
+                        weights=weights,
+                        max_workers=max_workers,
+                        min_score=min_score,
+                        limit=limit,
+                        dynamic_universe=dynamic_universe,
+                    )
+                return cached
 
     # One regime read per scan, applied to every ticker as a multiplier on
     # the composite. Soft-fail: in risk-off we want to *down-weight* the

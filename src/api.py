@@ -25,8 +25,10 @@ from src import tracker
 from src.analyst.openrouter import (
     OpenRouterError,
     facts_block,
+    facts_block_quicktake,
     facts_block_zero_dte,
     generate_narrative,
+    generate_quicktake,
     generate_zero_dte_narrative,
 )
 from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
@@ -120,6 +122,44 @@ def ticker_endpoint(symbol: str) -> dict:
     if result.get("excluded"):
         raise HTTPException(status_code=422, detail=f"excluded: {result.get('exclude_reason')}")
     return {**result, "weights": DEFAULT_WEIGHTS}
+
+
+QUICKTAKE_CACHE_TTL = 1800  # 30 min — per-row scan annotations
+
+
+@app.get("/api/ticker/{symbol}/quicktake")
+def quicktake_endpoint(symbol: str) -> dict:
+    """One-sentence Haiku take for a scan-table row. Lazy-loaded on click.
+
+    ~$0.001/call, ~2s on cold cache, instant on cached. Different from
+    /narrative which is the deeper bull/bear analysis.
+    """
+    symbol = symbol.upper()
+    cached = _cache.get("quicktakes", symbol, QUICKTAKE_CACHE_TTL)
+    if cached:
+        return {**cached, "cached": True}
+
+    try:
+        result = score_ticker(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if result.get("excluded"):
+        raise HTTPException(status_code=422, detail=f"excluded: {result.get('exclude_reason')}")
+
+    try:
+        out = generate_quicktake(facts_block_quicktake(result))
+    except OpenRouterError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    output = {
+        "ticker": symbol,
+        "score": result["score"],
+        "take": out["take"],
+        "model_used": out["model_used"],
+        "cached": False,
+    }
+    _cache.put("quicktakes", symbol, output)
+    return output
 
 
 @app.get("/api/ticker/{symbol}/narrative")

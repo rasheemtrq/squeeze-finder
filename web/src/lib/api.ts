@@ -35,6 +35,9 @@ export type ScanResult = {
   min_score: number;
   results: TickerResult[];
   excluded: { ticker: string; reason: string }[];
+  cached?: boolean;
+  cache_age_seconds?: number;
+  cache_stale?: boolean;
 };
 
 export type Narrative = {
@@ -184,6 +187,18 @@ export type OptionsRec = {
 
 export function fetchOptions(symbol: string, top: number = 8): Promise<OptionsRec> {
   return jsonFetch<OptionsRec>(`/api/ticker/${symbol.toUpperCase()}/options?top=${top}`);
+}
+
+export type Quicktake = {
+  ticker: string;
+  score: number;
+  take: string;
+  model_used: string;
+  cached?: boolean;
+};
+
+export function fetchQuicktake(symbol: string): Promise<Quicktake> {
+  return jsonFetch<Quicktake>(`/api/ticker/${symbol.toUpperCase()}/quicktake`);
 }
 
 export type ZeroDteContract = {

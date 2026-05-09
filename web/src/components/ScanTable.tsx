@@ -4,6 +4,7 @@ import { fetchScan, formatMarketCap, formatPrice } from "@/lib/api";
 import { ScoreBadge, FactorBar } from "./ScoreBadge";
 import { Flag } from "./Flag";
 import { Logo } from "./Logo";
+import { QuicktakeCell } from "./QuicktakeCell";
 
 export async function ScanTable({ limit = 20 }: { limit?: number }) {
   let data;
@@ -21,7 +22,12 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
     );
   }
 
-  const { results, as_of, scored, universe_size } = data;
+  const { results, as_of, scored, universe_size, cache_age_seconds, cache_stale } = data;
+  const ageLabel = cache_age_seconds == null
+    ? null
+    : cache_age_seconds < 60
+      ? `${Math.round(cache_age_seconds)}s ago`
+      : `${Math.round(cache_age_seconds / 60)}m ago`;
 
   return (
     <div>
@@ -34,8 +40,14 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
             {results.length}/{scored} scored · {universe_size} in universe
           </div>
         </div>
-        <div className="text-[11px] mono text-[var(--muted)]">
-          as_of {new Date(as_of).toLocaleString()}
+        <div className="text-[11px] mono text-[var(--muted)] flex items-center gap-2">
+          {ageLabel && (
+            <span className={cache_stale ? "text-[var(--warning-fg)]" : ""}>
+              {cache_stale ? "stale (refreshing) · " : "cached · "}
+              {ageLabel}
+            </span>
+          )}
+          <span>as_of {new Date(as_of).toLocaleString()}</span>
         </div>
       </div>
 
@@ -54,13 +66,14 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
               <th className="text-left font-normal px-3 py-2.5 w-[120px]">ta</th>
               <th className="text-left font-normal px-3 py-2.5 w-[120px]">cat</th>
               <th className="text-left font-normal px-3 py-2.5">flags</th>
+              <th className="text-left font-normal px-3 py-2.5">take</th>
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
             {results.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
+                <td colSpan={13} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
                   no results — try lowering min_score
                 </td>
               </tr>
@@ -113,6 +126,9 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="px-3 py-3">
+                  <QuicktakeCell ticker={r.ticker} />
                 </td>
                 <td className="px-3 py-3 text-right">
                   <Link
