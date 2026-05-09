@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.research.historical_squeezes import run as run_historical_squeezes
+from src.research.reddit_strategies import run as run_reddit_strategies
 from src.scanner import scan, score_ticker
 from src.score.backtest import evaluate as backtest_evaluate
 
@@ -173,6 +174,66 @@ def research_squeezes(
         from pathlib import Path
         Path(output).write_text(json.dumps(report, indent=2, default=str))
         console.print(f"[green]wrote full JSON to {output}[/green]")
+
+
+@app.command()
+def research_reddit(
+    per_source_limit: int = typer.Option(25, help="top N posts per (subreddit, query)"),
+    no_comments: bool = typer.Option(False, help="skip top-comments fetch (faster)"),
+    output: str = typer.Option("data/research/reddit_strategies.json", help="JSON output path"),
+) -> None:
+    """Scrape Reddit for 0DTE + squeeze trading patterns and synthesize via Haiku.
+
+    Honest caveat: Reddit posts are heavily survivorship-biased. Output surfaces
+    patterns people TALK about, not necessarily patterns that statistically work.
+    Use the synthesis to identify GAPS in what we already model, not as ground truth.
+    """
+    from pathlib import Path
+    out_path = Path(output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with console.status("scraping Reddit + synthesizing with Haiku (60-90s)..."):
+        report = run_reddit_strategies(
+            per_source_limit=per_source_limit,
+            with_comments=not no_comments,
+        )
+
+    out_path.write_text(json.dumps(report, indent=2, default=str))
+    console.print(f"[green]wrote full report to {out_path}[/green]")
+    console.print()
+
+    syn = report["synthesis"]
+    console.print(f"[bold]reddit strategy synthesis[/bold] · {report['harvest']['n_in_corpus']} posts analyzed by {syn.get('model_used', '?')}")
+    console.print()
+
+    for section_name in ("zero_dte", "squeezes"):
+        section = syn.get(section_name) or {}
+        if not section:
+            continue
+        console.print(f"[bold cyan]{section_name.upper().replace('_', ' ')}[/bold cyan]")
+        for subkey in ("entry_setups", "entry_triggers", "screening_criteria", "exit_rules", "risk_mgmt"):
+            items = section.get(subkey) or []
+            if not items:
+                continue
+            console.print(f"  [bold]{subkey}:[/bold]")
+            for it in items:
+                evidence = it.get("evidence_count")
+                marker = f" ({evidence}×)" if evidence else ""
+                console.print(f"    • [yellow]{it.get('name', '?')}[/yellow]{marker}: {it.get('what', '')}")
+        failures = section.get("common_failures") or []
+        if failures:
+            console.print("  [bold red]common failures:[/bold red]")
+            for f in failures:
+                console.print(f"    × {f}")
+        console.print()
+
+    if syn.get("data_sources_mentioned"):
+        console.print(f"[bold]data sources mentioned:[/bold] {', '.join(syn['data_sources_mentioned'])}")
+    if syn.get("tools_mentioned"):
+        console.print(f"[bold]tools mentioned:[/bold] {', '.join(syn['tools_mentioned'])}")
+    if syn.get("honest_caveats"):
+        console.print()
+        console.print(f"[dim italic]{syn['honest_caveats']}[/dim italic]")
 
 
 @app.command()
