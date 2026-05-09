@@ -342,7 +342,29 @@ def score_si(
         si_amplifier = min(1.0, max(si_pct, 0) / 0.10) if si_pct else 0.3
         insider_component *= si_amplifier
 
-    score = _clip(pct_component + dtc_component + finra_component + insider_component)
+    # Float-aware multiplier — empirically validated by the historical-squeeze
+    # backtest: every name we missed in the partial replay (KOSS, SPRT, HKD,
+    # MMAT, IRNT) had a float under ~10M. Same SI% on a 5M-float name is
+    # structurally a much bigger squeeze than on a 500M-float name because each
+    # forced buy moves the price more. Tier:
+    #   <5M float    -> 1.40x   (sub-microcap, extreme squeeze fuel)
+    #   <20M float   -> 1.20x   (microcap)
+    #   <50M float   -> 1.10x   (small)
+    #   <200M float  -> 1.00x   (normal)
+    #   >=200M float -> 1.00x   (large, no boost)
+    # Only applies when there's a real SI signal to amplify (avoids inflating
+    # randomly-thin floats that aren't being shorted).
+    raw_si_score = pct_component + dtc_component + finra_component + insider_component
+    float_shares = fund.get("float_shares") or 0
+    float_mult = 1.0
+    if float_shares > 0 and raw_si_score >= 30:
+        if float_shares < 5_000_000:
+            float_mult = 1.40
+        elif float_shares < 20_000_000:
+            float_mult = 1.20
+        elif float_shares < 50_000_000:
+            float_mult = 1.10
+    score = _clip(raw_si_score * float_mult)
 
     stale = False
     si_age_days: int | None = None
@@ -376,6 +398,14 @@ def score_si(
         flag = "insider_cluster_buying"
     elif (insider_info.get("insider_buy_value_usd") or 0) >= 1_000_000 and si_pct and si_pct >= 0.15:
         flag = "insider_buying"
+    # Tiny float on a real SI signal — the textbook small-float squeeze setup.
+    # Promote over the structural-only flags since float dominates squeeze
+    # mechanics on this scale.
+    if float_mult >= 1.20 and (
+        (si_pct and si_pct >= 0.15)
+        or (finra_info.get("finra_latest_short_ratio", 0) >= 0.40)
+    ):
+        flag = "tiny_float_squeeze"
     if si_age_days is not None and si_age_days > 30 and not finra_info:
         flag = "si_stale"
     elif stale and not finra_info:
@@ -386,6 +416,8 @@ def score_si(
         "dtc": dtc,
         "si_as_of_epoch": si_date,
         "stale_yf": stale,
+        "float_shares": float_shares,
+        "float_mult": round(float_mult, 2),
         **finra_info,
         **insider_info,
         "flag": flag,

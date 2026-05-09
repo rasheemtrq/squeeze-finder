@@ -343,7 +343,20 @@ def evaluate_case_at(case: SqueezeCase, t_minus: int) -> dict[str, Any]:
     # not the structural SI%/DTC snapshot. Score with a stub `fund` that
     # has SI% and DTC=0 so the structural components zero out and only
     # FINRA + insider contribute. (Result is a "lower bound" SI score.)
-    si_stub_fund = {"short_percent_of_float": 0, "short_ratio": 0, "shares_short_date": None}
+    # Pass the CURRENT float as a proxy for historical float — imperfect
+    # (buybacks, issuances since) but lets the float-aware multiplier
+    # apply to micro-cap cases where it matters most.
+    proxy_float = None
+    try:
+        proxy_float = yf.Ticker(case["ticker"]).info.get("floatShares")
+    except Exception:
+        pass
+    si_stub_fund = {
+        "short_percent_of_float": 0,
+        "short_ratio": 0,
+        "shares_short_date": None,
+        "float_shares": proxy_float,
+    }
     si_score, si_sig = live_score_si(si_stub_fund, finra, insider)
 
     regime = _hist_regime(asof)
