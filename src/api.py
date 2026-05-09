@@ -152,6 +152,19 @@ def universe_endpoint() -> dict:
     return {"tickers": DEFAULT_UNIVERSE, "count": len(DEFAULT_UNIVERSE)}
 
 
+@app.get("/api/backtest")
+def backtest_endpoint(window: int = Query(5, ge=1, le=60)) -> dict:
+    """Hit-rate by composite-score decile across recorded scan snapshots.
+
+    Wraps the same logic as `uv run squeeze backtest --window N`. Read-only,
+    no cache (snapshots are filesystem-cheap to reread). Used by the
+    scheduled weekly digest agent — see /Users/rash/squeeze-finder docs.
+    """
+    from src.score.backtest import evaluate as backtest_evaluate
+
+    return backtest_evaluate(window_days=window)
+
+
 @app.get("/api/zero-dte")
 def zero_dte_endpoint(top_per_side: int = Query(3, ge=1, le=10), refresh: bool = False) -> dict:
     """Same-day-expiry options ranked by 2x/5x/10x payoff probability.
