@@ -37,6 +37,8 @@ from src.data.prices import DataUnavailable
 from src.options.recommender import recommend as recommend_options
 from src.options.zero_dte_scorer import screen_universe as screen_zero_dte
 from src.scanner import scan, score_ticker
+from src.score.swing_factors import SWING_WEIGHTS
+from src.swing_scanner import swing_scan
 
 NARRATIVE_CACHE_TTL = 1800
 
@@ -203,6 +205,38 @@ def backtest_endpoint(window: int = Query(5, ge=1, le=60)) -> dict:
     from src.score.backtest import evaluate as backtest_evaluate
 
     return backtest_evaluate(window_days=window)
+
+
+@app.get("/api/swing-scan")
+def swing_scan_endpoint(
+    limit: int = Query(25, ge=1, le=100),
+    min_score: float = Query(0, ge=0, le=100),
+    tickers: str | None = Query(None, description="comma-separated override of default universe"),
+    w_stage2: float = Query(SWING_WEIGHTS["stage2"], ge=0, le=1),
+    w_breakout: float = Query(SWING_WEIGHTS["breakout"], ge=0, le=1),
+    w_rs: float = Query(SWING_WEIGHTS["rs"], ge=0, le=1),
+    w_catalyst: float = Query(SWING_WEIGHTS["catalyst"], ge=0, le=1),
+    w_smart_money: float = Query(SWING_WEIGHTS["smart_money"], ge=0, le=1),
+) -> dict:
+    """Swing-trade scan: Stage-2 trend + volume-confirmed breakout + RS vs SPY +
+    catalyst + smart-money confirm. Catches multi-week trend continuations
+    (INTC-style AI rally, SNDK-style memory breakout) early."""
+    weights = {
+        "stage2": w_stage2,
+        "breakout": w_breakout,
+        "rs": w_rs,
+        "catalyst": w_catalyst,
+        "smart_money": w_smart_money,
+    }
+    total = sum(weights.values())
+    if abs(total - 1.0) > 0.001:
+        weights = {k: v / total for k, v in weights.items()}
+
+    universe = None
+    if tickers:
+        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+
+    return swing_scan(tickers=universe, weights=weights, min_score=min_score, limit=limit)
 
 
 @app.get("/api/zero-dte")

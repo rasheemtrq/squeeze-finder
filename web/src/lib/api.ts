@@ -40,6 +40,51 @@ export type ScanResult = {
   cache_stale?: boolean;
 };
 
+export type SwingResult = {
+  ticker: string;
+  name: string;
+  price: number | null;
+  market_cap: number | null;
+  score: number;
+  factors: {
+    stage2: FactorScore;
+    breakout: FactorScore;
+    rs: FactorScore;
+    catalyst: FactorScore;
+    smart_money: FactorScore;
+  };
+  flags: string[];
+  excluded: boolean;
+  exclude_reason: string | null;
+  as_of: string;
+};
+
+export type SwingScanResult = {
+  as_of: string;
+  universe_size: number;
+  scored: number;
+  returned: number;
+  weights: Record<string, number>;
+  min_score: number;
+  regime: { regime: string; multiplier: number };
+  results: SwingResult[];
+  excluded: { ticker: string; reason: string }[];
+  cached?: boolean;
+  cache_age_seconds?: number;
+  cache_stale?: boolean;
+};
+
+export function fetchSwingScan(params?: {
+  limit?: number;
+  min_score?: number;
+}): Promise<SwingScanResult> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.min_score) qs.set("min_score", String(params.min_score));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return jsonFetch<SwingScanResult>(`/api/swing-scan${suffix}`);
+}
+
 export type Narrative = {
   ticker: string;
   score: number;
