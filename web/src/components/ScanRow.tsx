@@ -103,8 +103,8 @@ export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-[var(--border)] last:border-b-0">
-          <td colSpan={TOTAL_COLS} className="px-3 pb-3 pt-0">
+        <tr className="border-b border-[var(--border)] last:border-b-0 bg-white/[0.025]">
+          <td colSpan={TOTAL_COLS} className="px-6 py-3">
             <TakeExpansion take={take} error={error} />
           </td>
         </tr>
@@ -159,7 +159,7 @@ export function TakeExpansion({
 }) {
   if (error) {
     return (
-      <div className="flex items-start gap-2 ml-12 text-xs text-[var(--danger-fg)]">
+      <div className="text-xs text-[var(--danger-fg)] flex items-start gap-2">
         <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
         <span className="mono">take failed: {error}</span>
       </div>
@@ -167,7 +167,10 @@ export function TakeExpansion({
   }
   if (!take) return null;
   return (
-    <div className="flex items-start gap-2 ml-12 text-[13px] leading-relaxed text-[var(--foreground)] max-w-3xl">
+    <div
+      className="flex items-start gap-2.5 text-[13px] leading-relaxed text-[var(--foreground)]"
+      style={{ maxWidth: "min(48rem, 100%)" }}
+    >
       <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] mt-0.5 shrink-0" />
       <span>{take.take}</span>
     </div>
