@@ -1,10 +1,5 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import { fetchSwingScan, formatMarketCap, formatPrice } from "@/lib/api";
-import { ScoreBadge, FactorBar } from "./ScoreBadge";
-import { Flag } from "./Flag";
-import { Logo } from "./Logo";
-import { QuicktakeCell } from "./QuicktakeCell";
+import { fetchSwingScan } from "@/lib/api";
+import { SwingRow } from "./SwingRow";
 
 const FACTORS = ["stage2", "breakout", "rs", "catalyst", "smart_money"] as const;
 const FACTOR_LABEL: Record<(typeof FACTORS)[number], string> = {
@@ -78,7 +73,7 @@ export async function SwingTable({ limit = 25 }: { limit?: number }) {
                 </th>
               ))}
               <th className="text-left font-normal px-3 py-2.5">flags</th>
-              <th className="text-left font-normal px-3 py-2.5">take</th>
+              <th className="text-left font-normal px-3 py-2.5 w-[80px]">take</th>
               <th className="w-8" />
             </tr>
           </thead>
@@ -91,66 +86,7 @@ export async function SwingTable({ limit = 25 }: { limit?: number }) {
               </tr>
             )}
             {results.map((r, i) => (
-              <tr
-                key={r.ticker}
-                className="border-b border-[var(--border)] last:border-b-0 hover:bg-white/[0.02] transition-colors group"
-              >
-                <td className="px-3 py-3 mono tabular-nums text-[var(--muted)]">{i + 1}</td>
-                <td className="px-3 py-3">
-                  <Link
-                    href={`/t/${r.ticker}`}
-                    className="flex items-center gap-2.5 group-hover:text-[var(--accent)] transition-colors"
-                  >
-                    <Logo ticker={r.ticker} size={26} />
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <span className="mono font-medium text-sm">{r.ticker}</span>
-                      <span className="text-[11px] text-[var(--muted)] truncate max-w-[180px]">
-                        {r.name}
-                      </span>
-                    </div>
-                  </Link>
-                </td>
-                <td className="px-3 py-3 mono tabular-nums text-right">{formatPrice(r.price)}</td>
-                <td className="px-3 py-3 mono tabular-nums text-right text-[var(--muted)]">
-                  {formatMarketCap(r.market_cap)}
-                </td>
-                <td className="px-3 py-3 text-right">
-                  <ScoreBadge score={r.score} size="md" />
-                </td>
-                {FACTORS.map((k) => (
-                  <td key={k} className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="mono tabular-nums text-xs w-7 text-right text-[var(--muted)]">
-                        {r.factors[k].score.toFixed(0)}
-                      </span>
-                      <FactorBar score={r.factors[k].score} />
-                    </div>
-                  </td>
-                ))}
-                <td className="px-3 py-3">
-                  <div className="flex flex-wrap gap-1 max-w-[200px]">
-                    {r.flags.slice(0, 3).map((f) => (
-                      <Flag key={f} flag={f} />
-                    ))}
-                    {r.flags.length > 3 && (
-                      <span className="mono text-[10px] text-[var(--muted)]">
-                        +{r.flags.length - 3}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <QuicktakeCell ticker={r.ticker} />
-                </td>
-                <td className="px-3 py-3 text-right">
-                  <Link
-                    href={`/t/${r.ticker}`}
-                    className="inline-flex items-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <ArrowUpRight className="w-4 h-4 text-[var(--muted)]" />
-                  </Link>
-                </td>
-              </tr>
+              <SwingRow key={r.ticker} r={r} index={i} />
             ))}
           </tbody>
         </table>
