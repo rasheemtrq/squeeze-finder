@@ -14,7 +14,7 @@ import { ScoreBadge, FactorBar } from "./ScoreBadge";
 import { Flag } from "./Flag";
 import { Logo } from "./Logo";
 
-const TOTAL_COLS = 13;
+const TOTAL_COLS = 14;
 
 export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
   const [take, setTake] = useState<Quicktake | null>(null);
@@ -67,6 +67,23 @@ export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
         </td>
         <td className="px-3 py-3 text-right">
           <ScoreBadge score={r.score} size="md" />
+        </td>
+        <td className="px-3 py-3 text-right">
+          {r.pressure_score ? (
+            <div
+              className="flex flex-col items-end gap-0.5"
+              title={`L=${r.pressure_score.components.lending.toFixed(0)} · G=${r.pressure_score.components.gamma.toFixed(0)} · S=${r.pressure_score.components.social.toFixed(0)}`}
+            >
+              <ScoreBadge score={r.pressure_score.score} size="md" />
+              <span className="mono text-[9px] text-[var(--muted)] tabular-nums">
+                {r.pressure_score.components.lending.toFixed(0)}·
+                {r.pressure_score.components.gamma.toFixed(0)}·
+                {r.pressure_score.components.social.toFixed(0)}
+              </span>
+            </div>
+          ) : (
+            <span className="text-[var(--muted)] mono text-xs">–</span>
+          )}
         </td>
         {(["sentiment", "options", "si", "ta", "catalyst"] as const).map((k) => (
           <td key={k} className="px-3 py-3">

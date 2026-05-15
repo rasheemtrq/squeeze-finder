@@ -55,6 +55,12 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
               <th className="text-right font-normal px-3 py-2.5">price</th>
               <th className="text-right font-normal px-3 py-2.5">mcap</th>
               <th className="text-right font-normal px-3 py-2.5">score</th>
+              <th
+                className="text-right font-normal px-3 py-2.5"
+                title="multiplicative squeeze pressure (lending × gamma × social, geometric mean). all three must fire."
+              >
+                pressure
+              </th>
               <th className="text-left font-normal px-3 py-2.5 w-[120px]">sent</th>
               <th className="text-left font-normal px-3 py-2.5 w-[120px]">opts</th>
               <th className="text-left font-normal px-3 py-2.5 w-[120px]">si</th>
@@ -68,7 +74,7 @@ export async function ScanTable({ limit = 20 }: { limit?: number }) {
           <tbody>
             {results.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
+                <td colSpan={14} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
                   no results — try lowering min_score
                 </td>
               </tr>

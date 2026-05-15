@@ -50,6 +50,10 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
     atm_put_iv: float | None = None
     unusual_call_strikes: list[dict] = []
     unusual_put_strikes: list[dict] = []
+    # strike-level data for the squeeze-pressure model: near-money calls
+    # (spot..spot+15%) within 21 DTE. Collected once here so pressure.py
+    # doesn't need a second yfinance call per ticker.
+    gamma_strikes: list[dict] = []
 
     for exp in expiries[:max_expiries]:
         try:
@@ -62,6 +66,26 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
         put_vol_total += int(puts["volume"].fillna(0).sum())
         call_oi_total += int(calls["openInterest"].fillna(0).sum())
         put_oi_total += int(puts["openInterest"].fillna(0).sum())
+
+        exp_dt_now = datetime.strptime(exp, "%Y-%m-%d").replace(tzinfo=UTC)
+        exp_dte = (exp_dt_now - datetime.now(UTC)).days
+        if exp_dte <= 21:
+            pressure_mask = (calls["strike"] >= spot) & (calls["strike"] <= spot * 1.15)
+            sub = calls.loc[pressure_mask].copy()
+            if not sub.empty:
+                sub["openInterest"] = sub["openInterest"].fillna(0)
+                sub["impliedVolatility"] = sub["impliedVolatility"].fillna(0)
+                for _, prow in sub.iterrows():
+                    p_oi = int(prow["openInterest"])
+                    if p_oi <= 0:
+                        continue
+                    gamma_strikes.append({
+                        "expiry": exp,
+                        "dte": exp_dte,
+                        "strike": float(prow["strike"]),
+                        "oi": p_oi,
+                        "iv": float(prow["impliedVolatility"]),
+                    })
 
         if exp == nearest_expiry:
             near_mask = (calls["strike"] >= spot * 0.95) & (calls["strike"] <= spot * 1.10)
@@ -172,6 +196,7 @@ def fetch(ticker: str, max_expiries: int = 3, force_refresh: bool = False) -> di
         "unusual_call_top": unusual_call_strikes[:5],
         "unusual_put_top": unusual_put_strikes[:5],
         "num_expiries_sampled": min(max_expiries, len(expiries)),
+        "gamma_strikes": gamma_strikes,
     }
     _cache.put("options", ticker, result)
     return result

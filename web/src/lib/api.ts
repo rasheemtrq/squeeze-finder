@@ -5,12 +5,19 @@ export type FactorScore = {
   signals: Record<string, unknown> & { flag?: string | null };
 };
 
+export type PressureScore = {
+  score: number;
+  components: { lending: number; gamma: number; social: number };
+  raw: { L: number; G: number; S: number };
+};
+
 export type TickerResult = {
   ticker: string;
   name: string;
   price: number | null;
   market_cap: number | null;
   score: number;
+  pressure_score?: PressureScore;
   factors: {
     sentiment: FactorScore;
     options: FactorScore;

@@ -29,6 +29,7 @@ from src.data.prices import DataUnavailable
 from src.score.backtest import record_snapshot
 from src.score.composite import collect_flags, composite, is_red_flag
 from src.score.factors import compute_all
+from src.score.pressure import compute as compute_pressure
 
 SCAN_CACHE_FRESH_TTL = 600   # 10 min — under this age, served as fresh, no refresh
 SCAN_CACHE_MAX_AGE = 3600    # 1 hour — beyond this, treat as missing and full-refetch
@@ -99,6 +100,12 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         flags.append("risk:dilution_shelf")
         score = max(0, score - 8)
 
+    pressure = compute_pressure(bundle)
+    if pressure["score"] >= 70:
+        flags.append("pressure:red_alert")
+    elif pressure["score"] >= 50:
+        flags.append("pressure:high")
+
     fund = bundle.get("fundamentals") or {}
     prices_data = bundle.get("prices") or {}
 
@@ -108,6 +115,7 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         "price": fund.get("price") or prices_data.get("close"),
         "market_cap": fund.get("market_cap"),
         "score": score,
+        "pressure_score": pressure,
         "factors": factors,
         "flags": flags,
         "excluded": excluded,

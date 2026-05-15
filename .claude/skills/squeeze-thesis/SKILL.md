@@ -8,11 +8,27 @@ description: Scoring and ranking formula for short-squeeze candidates. Load when
 ## When this skill is active
 User says: "run the screen", "find squeezes today", "rank these tickers", "score TICKER", "what's squeezing", "adjust weights".
 
-## Composite score (0–100)
+## Two parallel scores live on every ticker
+
+### A. Composite (linear, 5 factors) — `result.score`
 ```
 score = 0.30 * sentiment + 0.25 * options + 0.20 * si + 0.15 * ta + 0.10 * catalyst
 ```
-Each factor normalized to 0–100 per rules below. Weights overridable via `--weights` CLI flag; default stored in `src/config.py::DEFAULT_WEIGHTS`.
+Each factor normalized to 0–100 per rules below. Weights overridable via `--weights` CLI flag; default stored in `src/config.py::DEFAULT_WEIGHTS`. Good for ranked discovery and exploration; TA + catalyst add useful confirmation but they trail squeezes, not lead them.
+
+### B. Pressure (multiplicative, 3 pressures) — `result.pressure_score`
+Implemented in `src/score/pressure.py`. Research-backed by Allen, Haas, Nowak, Pirovano & Tengulov (2025) "Squeezing Shorts Through Social Media Platforms" + SqueezeMetrics dealer-gamma formulation.
+```
+pressure = (L_norm · G_norm · S_norm) ** (1/3)      # geometric mean, 0–100
+```
+Where:
+- **L** = SI%Float / 0.20  ·  √(DTC/5)  ·  (FINRA short-vol recent / older)
+- **G** = Σ γ(S,K,τ,σ) · OI · 100 · S²  /  (S · float_shares)   for calls with K ∈ [S, 1.15·S], τ ∈ [3, 21]d, OI ≥ 50
+- **S** = WSB rank+velocity component  ⊗  StockTwits engagement·polarity component
+
+Geometric mean enforces "all three must fire" — a single-factor candidate (huge social, zero lending) scores ~0 on pressure but might score 50+ on the linear composite. **The pressure score is the academically-validated signal for *imminent* squeezes (1–10 day lead time per Allen et al.).**
+
+Use the two together: linear composite for the watchlist, pressure score for entry timing.
 
 ## Factor rubrics
 

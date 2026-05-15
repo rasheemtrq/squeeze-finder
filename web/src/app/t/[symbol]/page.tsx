@@ -88,6 +88,59 @@ async function TickerDetail({ symbol }: { symbol: string }) {
         </div>
       )}
 
+      {data.pressure_score && (
+        <div className="rounded-md ring-border bg-[var(--surface)] p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
+                  squeeze pressure model
+                </span>
+                <span className="text-[10px] mono text-[var(--accent)]">multiplicative</span>
+              </div>
+              <div className="text-[11px] text-[var(--muted)] mt-0.5 leading-relaxed max-w-2xl">
+                Allen et al. (2025) interaction term + SqueezeMetrics dealer gamma. All three
+                pressures must fire — geometric mean punishes single-factor candidates.
+              </div>
+            </div>
+            <ScoreBadge score={data.pressure_score.score} size="lg" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {(["lending", "gamma", "social"] as const).map((k) => {
+              const v = data.pressure_score!.components[k];
+              const raw = data.pressure_score!.raw;
+              const rawValue = k === "lending" ? raw.L : k === "gamma" ? raw.G : raw.S;
+              const rawLabel =
+                k === "lending"
+                  ? "SI · DTC · FINRA accel"
+                  : k === "gamma"
+                    ? "dealer Γ / mkt cap"
+                    : "WSB rank+velocity · ST hot";
+              return (
+                <div
+                  key={k}
+                  className="rounded-md ring-border bg-[var(--surface-2)] p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
+                      {k}
+                    </span>
+                    <ScoreBadge score={v} size="sm" />
+                  </div>
+                  <FactorBar score={v} />
+                  <div className="text-[10px] mono text-[var(--muted)] leading-tight">
+                    <div>{rawLabel}</div>
+                    <div className="tabular-nums">
+                      raw {k === "gamma" ? rawValue.toFixed(4) : rawValue.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <PriceChart symbol={data.ticker} />
 
       <OptionsRecommendations symbol={data.ticker} />
