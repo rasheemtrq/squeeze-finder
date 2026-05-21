@@ -207,6 +207,9 @@ def backtest_endpoint(window: int = Query(5, ge=1, le=60)) -> dict:
     return backtest_evaluate(window_days=window)
 
 
+CALIBRATION_CACHE_TTL = 3600  # 1h — snapshots are immutable; recompute hourly
+
+
 @app.get("/api/calibration")
 def calibration_endpoint(
     window: int = Query(5, ge=1, le=60),
@@ -219,14 +222,26 @@ def calibration_endpoint(
     skill, lift_at_top_decile, spearman_ic, and per-bucket reliability rows.
     Use to verify each P0/P1 change actually improves calibration — not
     just absolute returns.
+
+    Cached 1h since the underlying scan snapshots are immutable on disk.
+    First call across many tickers blows past nginx's 180s timeout
+    (forward-return computation hits prices.fetch per snapshot); cache
+    serves subsequent requests instantly.
     """
+    cache_key = f"w{window}_t{threshold}_b{buckets}"
+    cached = _cache.get("calibration", cache_key, CALIBRATION_CACHE_TTL)
+    if cached:
+        return {**cached, "cached": True}
+
     from src.score.calibration import evaluate as calibration_evaluate
 
-    return calibration_evaluate(
+    result = calibration_evaluate(
         window_days=window,
         win_threshold_pct=threshold,
         n_buckets=buckets,
     )
+    _cache.put("calibration", cache_key, result)
+    return {**result, "cached": False}
 
 
 @app.get("/api/swing-scan")
