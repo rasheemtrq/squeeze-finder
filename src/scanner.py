@@ -15,10 +15,12 @@ from src.data import (
     dilution,
     finra,
     fundamentals,
+    iborrowdesk,
     insiders,
     inst_holders,
     options,
     prices,
+    regsho,
     stocktwits,
 )
 from src.data import (
@@ -59,6 +61,8 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
         "insiders": lambda: insiders.fetch(ticker),
         "dilution": lambda: dilution.fetch(ticker),
         "inst_holders": lambda: inst_holders.fetch(ticker),
+        "iborrowdesk": lambda: iborrowdesk.fetch(ticker),
+        "regsho": lambda: regsho.fetch(ticker),
     }
     for name, fn in sources.items():
         try:
@@ -220,12 +224,17 @@ def scan(
             except Exception as e:
                 errors.append({"ticker": t, "reason": f"scan_error: {e}"})
 
-    # Apply regime multiplier — squeezes don't survive risk-off.
+    # Apply regime multiplier — squeezes don't survive risk-off. Hits both
+    # the linear composite and the multiplicative pressure score.
     regime_mult = regime.get("multiplier", 1.0)
     if regime_mult != 1.0:
         for r in results:
             r["score_pre_regime"] = r["score"]
             r["score"] = round(r["score"] * regime_mult, 1)
+            ps = r.get("pressure_score")
+            if ps:
+                ps["score_pre_regime"] = ps["score"]
+                ps["score"] = round(ps["score"] * regime_mult, 1)
 
     results.sort(key=lambda r: r["score"], reverse=True)
     filtered = [r for r in results if r["score"] >= min_score][:limit]

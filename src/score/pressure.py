@@ -32,11 +32,18 @@ _MIN_OI = 50
 
 # ────────────────────────────────────────────────────────────────────────
 #  L — Lending Pressure
-#  Proxy for utilization × CTB acceleration (we lack paid borrow data).
-#  SI%Float level × FINRA daily-short-volume acceleration × √(DTC/5)
+#  When iBorrowDesk data is present: real CTB + utilization proxy + fee
+#  acceleration drive the score (Engelberg 2018 — dominates 102 anomalies).
+#  When absent: fall back to SI%/DTC + FINRA short-volume acceleration as
+#  the previous proxy. Reg SHO threshold-list residency adds a 1.3× kicker.
 # ────────────────────────────────────────────────────────────────────────
 
-def lending_pressure(fund: dict | None, finra: dict | None) -> float:
+def lending_pressure(
+    fund: dict | None,
+    finra: dict | None,
+    iborrowdesk: dict | None = None,
+    regsho: dict | None = None,
+) -> float:
     if not fund:
         return 0.0
 
@@ -46,8 +53,30 @@ def lending_pressure(fund: dict | None, finra: dict | None) -> float:
     L_level = si_pct / 0.20  # 1.0 at 20% SI/float, the practitioner threshold
     L_dtc = math.sqrt(dtc / 5) if dtc > 0 else 0.5  # √(DTC/5)
 
-    L_accel = 1.0
-    if finra and finra.get("series"):
+    # Borrow signal: prefer iBorrowDesk live data, fall back to FINRA accel.
+    L_borrow = 1.0
+    if iborrowdesk:
+        util = iborrowdesk.get("utilization_proxy")
+        fee_accel = iborrowdesk.get("fee_acceleration")
+        fee = iborrowdesk.get("latest_fee_pct")
+
+        # Utilization: 1.0 baseline at util ≤ 0.5; ramps to 2.5× at full scarcity.
+        util_term = 1.0
+        if util is not None:
+            util_term = 1.0 + max(0.0, util - 0.5) * 3.0  # 0.5→1.0, 0.75→1.75, 1.0→2.5
+
+        # Fee acceleration: 1.0 at flat; ramps to 2× at 3× fee in 2d vs 5d baseline.
+        accel_term = 1.0
+        if fee_accel is not None and fee_accel > 1.0:
+            accel_term = 1.0 + min(1.0, (fee_accel - 1.0) * 0.5)
+
+        # Hard-to-borrow level: above 5% fee, every additional 10% adds 0.5.
+        fee_term = 1.0
+        if fee is not None and fee >= 5.0:
+            fee_term = 1.0 + min(1.5, (fee - 5.0) / 10.0 * 0.5)
+
+        L_borrow = util_term * accel_term * fee_term
+    elif finra and finra.get("series"):
         series = finra["series"]
         if len(series) >= 6:
             recent = [s.get("short_ratio", 0) for s in series[:3]]
@@ -55,9 +84,19 @@ def lending_pressure(fund: dict | None, finra: dict | None) -> float:
             recent_avg = sum(recent) / len(recent)
             older_avg = sum(older) / len(older) if older else 0
             if older_avg > 0:
-                L_accel = recent_avg / older_avg
+                L_borrow = recent_avg / older_avg
 
-    return L_level * L_dtc * L_accel
+    L = L_level * L_dtc * L_borrow
+
+    # Reg SHO threshold list — names with ≥5 consecutive settlement days of
+    # persistent FTDs face mandatory close-out under Rule 204. Mechanical
+    # forced-cover pressure. Boost ≥1.3× when present, more on extended stays.
+    if regsho and regsho.get("on_threshold_list"):
+        days = regsho.get("consecutive_days") or 1
+        boost = 1.3 + min(0.7, max(0, days - 5) * 0.05)  # 5d→1.3, 10d→1.55, 20d→2.0
+        L *= boost
+
+    return L
 
 
 # ────────────────────────────────────────────────────────────────────────
@@ -184,7 +223,12 @@ def squeeze_score(L: float, G: float, S: float) -> dict:
 
 def compute(bundle: dict) -> dict:
     """Takes a scanner bundle, returns the full pressure result."""
-    L = lending_pressure(bundle.get("fundamentals"), bundle.get("finra"))
+    L = lending_pressure(
+        bundle.get("fundamentals"),
+        bundle.get("finra"),
+        bundle.get("iborrowdesk"),
+        bundle.get("regsho"),
+    )
     G = gamma_pressure(bundle.get("options"), bundle.get("fundamentals"))
     S = social_pressure(bundle.get("stocktwits"), bundle.get("apewisdom"))
     return squeeze_score(L, G, S)
