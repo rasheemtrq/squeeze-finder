@@ -1,10 +1,51 @@
 from __future__ import annotations
 
+import math
+
 from src.config import DEFAULT_WEIGHTS
 
+# Sentiment gate centered at SI=10%. At SI<10% there's no meaningful short
+# base to squeeze — Allen et al. 2025 mechanism. Sigmoid-dampened sentiment
+# weight; the lost weight is redistributed pro-rata to the other 4 factors
+# so the composite still sums to 1.0.
+SENTIMENT_GATE_CENTER_PCT = 10.0  # in percent
+SENTIMENT_GATE_STEEPNESS = 5.0    # in percent — wider = gentler ramp
 
-def composite(factors: dict, weights: dict[str, float] | None = None) -> float:
+
+def _sentiment_gate(si_pct_float: float | None) -> float:
+    """Sigmoid in [0, 1]. SI=0% → ~0.12, 5% → ~0.27, 10% → 0.50, 15% → ~0.73, 20% → ~0.88."""
+    si = (si_pct_float or 0) * 100  # convert decimal to percent
+    return 1.0 / (1.0 + math.exp(-(si - SENTIMENT_GATE_CENTER_PCT) / SENTIMENT_GATE_STEEPNESS))
+
+
+def gated_weights(weights: dict[str, float], fund: dict | None) -> dict[str, float]:
+    """Apply the SI-gated sentiment dampener; redistribute lost weight pro-rata."""
+    w = dict(weights)
+    si_pct = (fund or {}).get("short_percent_of_float") or 0
+    gate = _sentiment_gate(si_pct)
+    w_sent_orig = w["sentiment"]
+    w["sentiment"] = w_sent_orig * gate
+    lost = w_sent_orig - w["sentiment"]
+    if lost > 0:
+        others = [k for k in w if k != "sentiment"]
+        other_total = sum(w[k] for k in others)
+        if other_total > 0:
+            for k in others:
+                w[k] += lost * (w[k] / other_total)
+    return w
+
+
+def composite(
+    factors: dict,
+    weights: dict[str, float] | None = None,
+    fund: dict | None = None,
+) -> float:
+    """Linear-weighted 5-factor composite. When `fund` is supplied, the
+    sentiment weight is gated by SI%float (no shorts, no squeeze).
+    """
     w = weights or DEFAULT_WEIGHTS
+    if fund is not None:
+        w = gated_weights(w, fund)
     total = sum(
         factors[k]["score"] * w[k]
         for k in ("sentiment", "options", "si", "ta", "catalyst")

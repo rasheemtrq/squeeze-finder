@@ -207,6 +207,28 @@ def backtest_endpoint(window: int = Query(5, ge=1, le=60)) -> dict:
     return backtest_evaluate(window_days=window)
 
 
+@app.get("/api/calibration")
+def calibration_endpoint(
+    window: int = Query(5, ge=1, le=60),
+    threshold: float = Query(10.0, ge=1.0, le=100.0, description="max drawup % defining a win"),
+    buckets: int = Query(10, ge=4, le=20),
+) -> dict:
+    """Brier-score decomposition + reliability diagram for composite & pressure.
+
+    Returns {composite, pressure} each with brier, reliability, resolution,
+    skill, lift_at_top_decile, spearman_ic, and per-bucket reliability rows.
+    Use to verify each P0/P1 change actually improves calibration — not
+    just absolute returns.
+    """
+    from src.score.calibration import evaluate as calibration_evaluate
+
+    return calibration_evaluate(
+        window_days=window,
+        win_threshold_pct=threshold,
+        n_buckets=buckets,
+    )
+
+
 @app.get("/api/swing-scan")
 def swing_scan_endpoint(
     limit: int = Query(25, ge=1, le=100),

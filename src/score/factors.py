@@ -291,10 +291,14 @@ def score_si(
     si_pct = fund.get("short_percent_of_float") or 0
     dtc = fund.get("short_ratio") or 0
     si_date = fund.get("shares_short_date")
+    sector = fund.get("sector")
 
-    # Rebalanced from (40, 30, 30) to (35, 25, 25, 15) so insider-buying can
-    # contribute up to 15 pts.
-    pct_component = 35 * min(si_pct / 0.30, 1) if si_pct else 0
+    # Sector-adjusted SI: a 20% SI biotech is base-rate; a 20% SI mega-cap
+    # tech is extraordinary. si_pct_normalized maps raw SI%float onto a
+    # 0..1 percentile within the ticker's sector. Multiply by 35 for the
+    # pct_component magnitude (unchanged from previous absolute design).
+    from src.score.sectors import si_pct_normalized
+    pct_component = 35 * si_pct_normalized(si_pct, sector) if si_pct else 0
     dtc_component = 25 * min(dtc / 10, 1) if dtc else 0
 
     finra_component = 0
@@ -358,7 +362,11 @@ def score_si(
             insider_component = max(insider_component, 12)
         # Without high SI, insider buying alone shouldn't carry the factor —
         # scale by the structural SI signal so it amplifies rather than substitutes.
-        si_amplifier = min(1.0, max(si_pct, 0) / 0.10) if si_pct else 0.3
+        # Use the sector's median SI as the "1.0x" floor: SI at sector median
+        # gets full amplifier, below that scales down.
+        from src.score.sectors import sector_reference as _sref
+        sector_median, _, _ = _sref(sector)
+        si_amplifier = min(1.0, max(si_pct, 0) / max(sector_median, 0.01)) if si_pct else 0.3
         insider_component *= si_amplifier
 
         # Insider-dumping demote (Reddit-corpus signal: insiders cashing out
@@ -491,6 +499,8 @@ def score_si(
     elif stale and not finra_info:
         flag = f"{flag or ''}_STALE".lstrip("_")
 
+    from src.score.sectors import sector_reference as _sref_final
+    _s_med, _s_p75, _s_p90 = _sref_final(sector)
     return score, {
         "si_pct": si_pct,
         "dtc": dtc,
@@ -498,6 +508,9 @@ def score_si(
         "stale_yf": stale,
         "float_shares": float_shares,
         "float_mult": round(float_mult, 2),
+        "sector": sector,
+        "sector_si_median": _s_med,
+        "sector_si_p90": _s_p90,
         **finra_info,
         **insider_info,
         **inst_info,

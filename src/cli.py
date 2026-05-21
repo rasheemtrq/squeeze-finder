@@ -11,6 +11,7 @@ from src.research.historical_squeezes import run as run_historical_squeezes
 from src.research.reddit_strategies import run as run_reddit_strategies
 from src.scanner import scan, score_ticker
 from src.score.backtest import evaluate as backtest_evaluate
+from src.score.calibration import evaluate as calibration_evaluate
 
 app = typer.Typer(help="squeeze-finder CLI")
 console = Console()
@@ -103,6 +104,60 @@ def backtest(window: int = typer.Option(5, help="forward-return window in calend
         for r in result["flag_performance"]:
             ftable.add_row(r["flag"], str(r["n"]), f"{r['avg_return_pct']:+.2f}", f"{r['win_rate']:.0%}")
         console.print(ftable)
+
+
+@app.command()
+def calibration(
+    window: int = typer.Option(5, help="forward-return window in calendar days"),
+    threshold: float = typer.Option(10.0, help='win threshold: max drawup ≥ this % counts as a "win"'),
+    buckets: int = typer.Option(10, help="reliability diagram resolution"),
+) -> None:
+    """Brier-score decomposition + reliability diagram for composite & pressure."""
+    report = calibration_evaluate(window_days=window, win_threshold_pct=threshold, n_buckets=buckets)
+    if report.get("evaluated", 0) == 0:
+        console.print(f"[yellow]{report.get('note', 'no data')}[/yellow]")
+        console.print(f"snapshots scanned: {report.get('snapshots', 0)}")
+        return
+
+    s = report["settings"]
+    console.print(
+        f"[bold]calibration[/bold]  window={s['window_days']}d  "
+        f"win=Δ+{s['win_threshold_pct']}%  buckets={s['n_buckets']}  "
+        f"evaluated={report['evaluated']}"
+    )
+
+    for model_name in ("composite", "pressure"):
+        m = report.get(model_name) or {}
+        if not m.get("n"):
+            console.print(f"\n[bold]{model_name}[/bold]  [yellow](no data)[/yellow]")
+            continue
+        console.print(
+            f"\n[bold]{model_name}[/bold]  base_rate={m.get('base_rate'):.3f}  "
+            f"brier={m.get('brier'):.4f}  reliability↓={m.get('reliability'):.4f}  "
+            f"resolution↑={m.get('resolution'):.4f}  skill={m.get('skill'):+.4f}  "
+            f"lift@top={m.get('lift_at_top_decile')}x  "
+            f"IC(score↔ret)={m.get('spearman_ic_score_vs_return')}"
+        )
+        if m.get("buckets"):
+            t = Table(title=f"{model_name} reliability diagram")
+            t.add_column("bucket")
+            t.add_column("score range")
+            t.add_column("n", justify="right")
+            t.add_column("predicted p", justify="right")
+            t.add_column("realized hit", justify="right")
+            t.add_column("gap", justify="right")
+            for b in m["buckets"]:
+                gap = b["gap"]
+                gap_color = "red" if abs(gap) > 0.15 else ("yellow" if abs(gap) > 0.05 else "green")
+                t.add_row(
+                    str(b["bucket"]),
+                    f"{b['score_range_pct'][0]:.0f}–{b['score_range_pct'][1]:.0f}",
+                    str(b["n"]),
+                    f"{b['predicted_p']:.2f}",
+                    f"{b['realized_hit_rate']:.2f}",
+                    f"[{gap_color}]{gap:+.2f}[/{gap_color}]",
+                )
+            console.print(t)
 
 
 @app.command()

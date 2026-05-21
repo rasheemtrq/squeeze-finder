@@ -49,8 +49,14 @@ def lending_pressure(
 
     si_pct = fund.get("short_percent_of_float") or 0
     dtc = fund.get("short_ratio") or 0
+    sector = fund.get("sector")
 
-    L_level = si_pct / 0.20  # 1.0 at 20% SI/float, the practitioner threshold
+    # Sector-adjusted SI normalizer: a name at its sector's p75 SI gets 1.0,
+    # below that scales linearly down. Replaces the universal 0.20 threshold
+    # which under-credited high-SI biotech and over-credited modest tech SI.
+    from src.score.sectors import si_pct_reference_p75
+    sector_p75 = si_pct_reference_p75(sector)
+    L_level = si_pct / sector_p75 if sector_p75 > 0 else 0
     L_dtc = math.sqrt(dtc / 5) if dtc > 0 else 0.5  # √(DTC/5)
 
     # Borrow signal: prefer iBorrowDesk live data, fall back to FINRA accel.

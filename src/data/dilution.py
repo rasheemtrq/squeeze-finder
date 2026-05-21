@@ -38,12 +38,26 @@ from src.data.prices import DataUnavailable
 CACHE_TTL = 86400  # 24h
 LOOKBACK_DAYS = 30
 CRITICAL_WINDOW_DAYS = 7
+FRESH_8K_HOURS = 48  # 8-K Item 3.02 etc. within this window = freshest signal possible
 
 # Forms we treat as dilution-relevant. Order matters for severity (first match wins).
 DILUTION_FORMS = ("S-1", "S-1/A", "424B1", "424B2", "424B3", "424B4", "424B5", "S-3", "S-3/A")
 PROSPECTUS_PREFIXES = ("424B",)
 REGISTRATION_NEW = ("S-1", "S-1/A")
 REGISTRATION_SHELF = ("S-3", "S-3/A", "S-3ASR")
+
+# 8-K item codes that materially affect a squeeze thesis. 3.02 is the
+# canonical at-the-market issuance trigger that kills most squeezes.
+# 1.03 (bankruptcy), 4.02 (restatement), 5.07 (vote — sometimes share-
+# authorization increases). We surface them so a fresh filing acts as a
+# kill-the-idea signal.
+DILUTIVE_8K_ITEMS = {
+    "1.03": "bankruptcy",
+    "3.02": "unregistered_equity_sale",  # the big one
+    "3.03": "material_modification_rights",
+    "4.02": "restatement",
+    "5.07": "shareholder_vote",
+}
 
 
 def _headers() -> dict[str, str]:
@@ -121,18 +135,25 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS, force_refresh: bool =
     forms = recent.get("form") or []
     dates = recent.get("filingDate") or []
     accnos = recent.get("accessionNumber") or []
+    items_field = recent.get("items") or []
+    accepted_field = recent.get("acceptanceDateTime") or []
 
     today = date.today()
+    now = datetime.now(UTC)
     cutoff = today - timedelta(days=lookback_days)
     critical_cutoff = today - timedelta(days=CRITICAL_WINDOW_DAYS)
+    fresh_cutoff = now - timedelta(hours=FRESH_8K_HOURS)
 
     filings: list[dict] = []
+    fresh_8k_events: list[dict] = []
     has_recent_prospectus = False
     has_recent_critical = False
     has_recent_new = False
     has_recent_shelf = False
+    has_fresh_8k_dilutive = False  # 3.02 or 3.03 in last 48h — kill-the-idea trigger
+    has_fresh_8k_other = False     # 1.03, 4.02 — bad but different mechanism
 
-    for form, fd, accno in zip(forms, dates, accnos, strict=False):
+    for i, (form, fd, accno) in enumerate(zip(forms, dates, accnos, strict=False)):
         try:
             d = date.fromisoformat(fd)
         except ValueError:
@@ -141,6 +162,48 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS, force_refresh: bool =
             continue
         if d < cutoff:
             break  # filings are newest-first
+
+        # 8-K item inspection (kept separate from the prospectus/shelf path).
+        if form.upper() == "8-K":
+            items_raw = items_field[i] if i < len(items_field) else ""
+            if not items_raw:
+                continue
+            # SEC items field is e.g. "1.01,7.01,9.01" or sometimes "1.01\t7.01"
+            tokens = [t.strip() for t in items_raw.replace("\t", ",").split(",") if t.strip()]
+            matched = [(t, DILUTIVE_8K_ITEMS[t]) for t in tokens if t in DILUTIVE_8K_ITEMS]
+            if not matched:
+                continue
+            # When was it ACCEPTED (not just filing date)? Acceptance is the
+            # timestamp that matters for "filed in the last 48h."
+            accepted_str = accepted_field[i] if i < len(accepted_field) else ""
+            accepted_dt: datetime | None = None
+            if accepted_str:
+                try:
+                    accepted_dt = datetime.fromisoformat(accepted_str.replace("Z", "+00:00"))
+                    if accepted_dt.tzinfo is None:
+                        accepted_dt = accepted_dt.replace(tzinfo=UTC)
+                except ValueError:
+                    accepted_dt = None
+            is_fresh = accepted_dt is not None and accepted_dt >= fresh_cutoff
+            event = {
+                "date": fd,
+                "form": "8-K",
+                "kind": "8k_event",
+                "accno": accno,
+                "items": [t for t, _ in matched],
+                "item_kinds": [k for _, k in matched],
+                "accepted": accepted_str,
+                "fresh": is_fresh,
+            }
+            filings.append(event)
+            if is_fresh:
+                fresh_8k_events.append(event)
+                if any(t in ("3.02", "3.03") for t, _ in matched):
+                    has_fresh_8k_dilutive = True
+                else:
+                    has_fresh_8k_other = True
+            continue
+
         kind = _classify(form)
         if not kind:
             continue
@@ -154,9 +217,11 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS, force_refresh: bool =
         elif kind == "shelf":
             has_recent_shelf = True
 
-    if has_recent_critical:
+    if has_fresh_8k_dilutive:
+        severity = "critical"  # fresh 3.02 trumps everything — the thesis is dead
+    elif has_recent_critical:
         severity = "critical"
-    elif has_recent_prospectus or has_recent_new:
+    elif has_recent_prospectus or has_recent_new or has_fresh_8k_other:
         severity = "high"
     elif has_recent_shelf:
         severity = "moderate"
@@ -171,6 +236,8 @@ def fetch(ticker: str, lookback_days: int = LOOKBACK_DAYS, force_refresh: bool =
         "severity": severity,
         "filings": filings[:10],
         "n_filings": len(filings),
+        "fresh_8k_events": fresh_8k_events,
+        "fresh_8k_dilutive": has_fresh_8k_dilutive,
     }
     _cache.put("dilution", cache_key, result)
     return result

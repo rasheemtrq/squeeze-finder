@@ -81,7 +81,7 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
     excluded, red_flag = is_red_flag(bundle)
 
     factors = compute_all(bundle)
-    score = composite(factors, weights)
+    score = composite(factors, weights, fund=bundle.get("fundamentals"))
     flags = collect_flags(factors)
     if red_flag:
         flags.append(f"risk:{red_flag}")
@@ -92,9 +92,15 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
 
     # Dilution risk — a pending offering (424B*) or fresh S-1 will kill any
     # squeeze setup overnight. Treat as a score demote, sized by severity.
+    # A fresh 8-K Item 3.02 (Unregistered Equity Sale) inside 48h is the
+    # canonical "thesis is dead" signal — most squeezes die on this filing.
+    # Zero the composite outright rather than apply a -35 demote.
     dil = bundle.get("dilution") or {}
     dil_severity = dil.get("severity") or "low"
-    if dil_severity == "critical":
+    if dil.get("fresh_8k_dilutive"):
+        flags.append("risk:dilution_8k_fresh")
+        score = 0  # thesis just died — let calibration prove this is right later
+    elif dil_severity == "critical":
         flags.append("risk:dilution_critical")
         score = max(0, score - 35)
     elif dil_severity == "high":

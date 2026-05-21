@@ -69,6 +69,7 @@ def record_snapshot(scan_result: dict[str, Any]) -> int:
                 "as_of": r.get("as_of"),
                 "ticker": r["ticker"],
                 "composite": r["score"],
+                "pressure_score": r.get("pressure_score"),
                 "weights": weights,
                 "factor_scores": {k: r["factors"][k]["score"] for k in r["factors"]},
                 "close_at_scan": r.get("price"),
