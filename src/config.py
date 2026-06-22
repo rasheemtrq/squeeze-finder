@@ -27,14 +27,17 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 # Override with OPENROUTER_MODELS=comma,separated,ids — e.g. set it back to
 # "anthropic/claude-haiku-4.5" to use the paid model. Free models still require
 # an OPENROUTER_API_KEY (a free OpenRouter account).
-# Free model chain for all agentic LLM calls — empirically confirmed to return
-# valid JSON on the free tier (probed 2026-06). Quality-first: nemotron-120b
-# leads, gpt-oss-20b (different provider) catches its rare misses. nex-n2-pro
-# was dropped — it 429s constantly on the free tier. Override via OPENROUTER_MODELS
-# (e.g. anthropic/claude-haiku-4.5 for the paid model). Needs an OPENROUTER_API_KEY.
+# Free model chain for all agentic LLM calls. Text/instruction-tuned models
+# lead (Gemma, then Qwen-instruct) for more natural narrative prose than the
+# reasoning models; nemotron-3-super-120b is the reliable safety net so a
+# narrative never fails. Free Gemma/Qwen are popular and 429 often, so the
+# fallback frequently serves — that's expected. Override via OPENROUTER_MODELS
+# (e.g. anthropic/claude-haiku-4.5 for a paid, always-on text model). All must
+# support JSON-mode output. Needs an OPENROUTER_API_KEY.
 _DEFAULT_OPENROUTER_MODELS = (
-    "nvidia/nemotron-3-super-120b-a12b:free,"
-    "openai/gpt-oss-20b:free"
+    "google/gemma-4-31b-it:free,"
+    "qwen/qwen3-next-80b-a3b-instruct:free,"
+    "nvidia/nemotron-3-super-120b-a12b:free"
 )
 OPENROUTER_MODELS = [
     m.strip()
