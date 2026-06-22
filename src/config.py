@@ -47,6 +47,28 @@ OPENROUTER_MODELS = [
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "squeeze-finder local")
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
+# ------------- Paper-trading bot (Alpaca) -------------
+# PAPER ONLY. The bot uses the paper endpoint unless ALPACA_PAPER=false is set
+# explicitly AND the runner is invoked with an explicit live flag (not enabled
+# in this build). Free paper keys: https://alpaca.markets → Paper Trading.
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "")
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
+ALPACA_PAPER = os.getenv("ALPACA_PAPER", "true").lower() != "false"  # default: paper
+BOT_TRADES_LOG = DATA_DIR / "bot_trades.jsonl"
+
+# Hard risk caps — checked before every order. Override via env.
+BOT_PARAMS = {
+    "risk_pct_per_trade": float(os.getenv("BOT_RISK_PCT", "1.0")),       # % equity risked/trade (= premium for long calls)
+    "max_open_positions": int(os.getenv("BOT_MAX_POSITIONS", "5")),
+    "max_daily_loss_pct": float(os.getenv("BOT_MAX_DAILY_LOSS_PCT", "3.0")),
+    "max_deploy_pct": float(os.getenv("BOT_MAX_DEPLOY_PCT", "20.0")),    # total premium-at-risk cap
+    "min_setup_score": float(os.getenv("BOT_MIN_SCORE", "50")),
+    "option_tp_pct": float(os.getenv("BOT_OPTION_TP_PCT", "100")),       # take profit at +100% premium
+    "option_sl_pct": float(os.getenv("BOT_OPTION_SL_PCT", "50")),        # stop at -50% premium
+    "time_stop_dte": int(os.getenv("BOT_TIME_STOP_DTE", "7")),          # close at <= 7 DTE (theta cliff)
+    "default_equity": float(os.getenv("BOT_DEFAULT_EQUITY", "100000")),  # dry-run sizing when no Alpaca account
+}
+
 CACHE_TTL = {
     "prices_intraday": 300,
     "prices_eod": 86400,

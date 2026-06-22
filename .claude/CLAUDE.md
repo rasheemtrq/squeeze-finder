@@ -5,7 +5,7 @@ Find US equities with 2–10x short-squeeze potential, deep-dive the best candid
 
 ## Non-negotiables
 - **Never fabricate market data.** If a data call fails, say so and stop — do not infer SI %, float, or options values from "typical" values.
-- **No trade execution.** This agent outputs ideas and analysis. Order entry is out of scope.
+- **No LIVE trade execution.** The paper-trading bot (`src/bot/`, Alpaca paper sandbox) may place *simulated* orders to forward-test strategies (`bot-plan` / `bot-run`). Live/real-money order entry is disabled in code — `AlpacaClient` refuses the live endpoint — and must stay disabled until a strategy shows positive expectancy on paper AND the user explicitly enables it. Default to paper; never wire live orders on an unvalidated signal.
 - **Free APIs only** unless the user explicitly adds a paid key. Current free sources: FINRA (SI, bi-monthly), yfinance (price/options/fundamentals), Reddit PRAW, StockTwits public, Finnhub free tier (earnings), openFDA (drug catalysts), SEC EDGAR.
 - **Free OpenRouter models for narrative; Claude (this agent) for reasoning + code.** Long-form analyst writeups route through OpenRouter using the model chain in `config.OPENROUTER_MODELS` (default: text/instruct models for natural prose — Gemma-4-31B → Qwen3-Next-Instruct → Nemotron-3-Super-120B (reliable safety net), tried in order, first valid JSON wins; free Gemma/Qwen 429 often so the fallback frequently serves). Override with the `OPENROUTER_MODELS` env var (e.g. set to `anthropic/claude-haiku-4.5` to go back to the paid model). Still needs a free `OPENROUTER_API_KEY`. Fail loudly if routing breaks — never fabricate a narrative. See `ticker-deepdive` skill.
 

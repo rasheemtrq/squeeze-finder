@@ -528,6 +528,94 @@ def accrue_cmd(
         console.print(f"[green]squeeze[/green] scored={sq['scored']} recorded snapshot")
 
 
+@app.command("bot-plan")
+def bot_plan_cmd(limit: int = 15) -> None:
+    """Dry-run: build today's paper-bot options plan (no orders placed)."""
+    from src.bot.runner import run
+
+    with console.status("building bot plan (scan + options)..."):
+        plan = run(execute=False, limit=limit)
+    console.print(
+        f"[bold]bot plan[/bold] · equity ${plan['equity']:,.0f} · "
+        f"scanned {plan['scanned']} · candidates {plan['candidates']} · "
+        f"deploy ${plan['deployed_usd']:,.0f}/${plan['deploy_cap_usd']:,.0f}"
+    )
+    if not plan["selected"]:
+        console.print("[yellow]no qualifying setups (check min score / risk caps)[/yellow]")
+        return
+    table = Table(title="paper bot — long-call plan (DRY RUN, no orders)")
+    for col in ["#", "ticker", "score", "contract", "dte", "qty", "est cost", "Δ", "entry", "opt SL→TP"]:
+        table.add_column(col, justify="left" if col in ("ticker", "contract") else "right")
+    for i, p in enumerate(plan["selected"], 1):
+        c, e = p["contract"], p["exit"]
+        table.add_row(
+            str(i), p["ticker"], f"{p['setup_score']}",
+            f"${c['strike']:g} {c['expiry'][5:]}", f"{c['dte']}", str(p["qty"]),
+            f"${p['est_cost']:,.0f}", f"{c['delta']:.2f}" if c.get("delta") else "–",
+            f"${(p['underlying'].get('entry') or 0):.2f}",
+            f"${e['sl_price']:g}→${e['tp_price']:g}",
+        )
+    console.print(table)
+    console.print(
+        "[dim]long calls · risk = premium paid · add ALPACA_API_KEY/SECRET (paper) "
+        "then `bot-run --execute` to place PAPER orders[/dim]"
+    )
+
+
+@app.command("bot-status")
+def bot_status_cmd() -> None:
+    """Alpaca PAPER account + open positions."""
+    from src.bot.alpaca import AlpacaClient, AlpacaError
+
+    try:
+        client = AlpacaClient()
+        acct = client.account()
+        pos = client.positions()
+    except AlpacaError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        return
+    eq, last = float(acct["equity"]), float(acct.get("last_equity") or acct["equity"])
+    day_pl = (eq - last) / last * 100 if last else 0.0
+    console.print(
+        f"[bold]paper account[/bold] equity ${eq:,.2f} · cash ${float(acct['cash']):,.2f} · "
+        f"day P/L {day_pl:+.2f}%"
+    )
+    if not pos:
+        console.print("no open positions")
+        return
+    t = Table(title="open positions")
+    for col in ["symbol", "qty", "avg cost", "mkt value", "P/L %"]:
+        t.add_column(col, justify="left" if col == "symbol" else "right")
+    for p in pos:
+        t.add_row(
+            p["symbol"], p["qty"], f"${float(p.get('avg_entry_price', 0)):.2f}",
+            f"${float(p.get('market_value', 0)):,.2f}",
+            f"{float(p.get('unrealized_plpc', 0)) * 100:+.1f}%",
+        )
+    console.print(t)
+
+
+@app.command("bot-run")
+def bot_run_cmd(
+    execute: bool = typer.Option(False, "--execute", help="place PAPER orders + manage exits (default: dry run)"),
+    limit: int = 15,
+) -> None:
+    """Run one bot cycle. Default is a dry run; --execute places PAPER orders."""
+    from src.bot.alpaca import AlpacaError
+    from src.bot.runner import run
+
+    if not execute:
+        bot_plan_cmd(limit=limit)
+        return
+    with console.status("running bot cycle (paper execute)..."):
+        try:
+            res = run(execute=True, limit=limit)
+        except AlpacaError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            return
+    console.print_json(json.dumps(res, default=str))
+
+
 @app.command()
 def serve(port: int = 8000, reload: bool = True) -> None:
     """Start FastAPI server."""
