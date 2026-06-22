@@ -17,8 +17,10 @@ export default function Home() {
       </div>
 
       <Suspense fallback={<TableSkeleton rows={12} />}>
-        {/* Default to pressure sort for higher-quality "right signals" experience */}
-        <ScanTable limit={25} sort_by="pressure" />
+        {/* Default to composite so the landing page always shows candidates.
+            Pressure is a strict imminent-squeeze gate (lending+gamma+social) that
+            is frequently empty — users can toggle to it from the table controls. */}
+        <ScanTable limit={25} sort_by="composite" />
       </Suspense>
     </div>
   );
