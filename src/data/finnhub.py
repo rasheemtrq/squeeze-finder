@@ -18,12 +18,12 @@ Recommended usage in scanner:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.config import FINNHUB_API_KEY
+
 
 class DataUnavailable(Exception):
     """Local copy to avoid circular import with prices.py."""
