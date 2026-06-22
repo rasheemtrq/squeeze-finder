@@ -20,7 +20,7 @@ User says: "deep dive on TICKER", "analyze TICKER", "write up TICKER", "what's t
 
 **OpenRouter model chain — configurable, free by default:**
 - Source of truth: `config.OPENROUTER_MODELS` (env `OPENROUTER_MODELS`, comma-separated, tried in order).
-- Default: `nex-agi/nex-n2-pro:free` as the **sole** model (user-chosen). It supports JSON-mode output but 429s frequently on the free tier — with no fallback, calls raise `OpenRouterError` during those windows. Add resilience via `OPENROUTER_MODELS=nex-agi/nex-n2-pro:free,nvidia/nemotron-3-super-120b-a12b:free`.
+- Default free chain: `nvidia/nemotron-3-super-120b-a12b:free` → `openai/gpt-oss-20b:free` — both empirically confirmed to return valid JSON on the free tier; quality-first, diverse providers so one rate-limiting doesn't kill narratives. (nex-agi/nex-n2-pro:free was dropped — it 429s constantly. Avoid reasoning-only free models — they burn the token budget on reasoning and return null content.)
 - To upgrade quality, set `OPENROUTER_MODELS=anthropic/claude-haiku-4.5` (paid, ~$0.004/call).
 
 Free-tier caveats: lower quality than paid, daily request caps, and occasional latency/outages — the multi-model fallback chain absorbs most of this. Results cached 30 min in `_cache` to limit repeats and rate-limit pressure. Step 5 (verify narrative against the facts block) matters MORE with free models — they hallucinate more.
