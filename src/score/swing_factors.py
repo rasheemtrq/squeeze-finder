@@ -45,7 +45,9 @@ def _ema(values: list[float], period: int) -> float | None:
 
 
 def score_stage2(prices: dict | None) -> tuple[float, dict]:
-    """Trend-stage detection. Stage 2 = uptrend (price > 50EMA > 200EMA)."""
+    """Trend-stage detection. Stage 2 = uptrend (price > 50EMA > 200EMA) and,
+    per Minervini's trend template, trading near its 52-week high — leaders
+    break to new highs rather than languishing mid-range."""
     if not prices:
         return 0.0, {"reason": "no_data"}
     bars = prices.get("bars") or []
@@ -53,6 +55,8 @@ def score_stage2(prices: dict | None) -> tuple[float, dict]:
         return 0.0, {"reason": "insufficient_history"}
 
     closes = [b["close"] for b in bars]
+    highs = [b["high"] for b in bars]
+    lows = [b["low"] for b in bars]
     ema50 = _ema(closes, 50)
     ema200 = _ema(closes, 200)
     if ema50 is None or ema200 is None or ema50 == 0:
@@ -63,33 +67,51 @@ def score_stage2(prices: dict | None) -> tuple[float, dict]:
     ema50_30d_ago = _ema(closes[:-30], 50) if len(closes) > 80 else None
     ema200_30d_ago = _ema(closes[:-30], 200) if len(closes) > 230 else None
 
+    # 52-week range from the (up to) 1y of bars we hold.
+    high_52w = max(highs)
+    low_52w = min(lows)
+    pct_of_52w_high = last / high_52w if high_52w > 0 else 0
+    pct_above_52w_low = (last / low_52w - 1) if low_52w > 0 else 0
+
     score = 0.0
     components: dict[str, Any] = {}
 
-    # Component 1: price above 50EMA (20 pts) — basic uptrend membership
+    # Component 1: price above 50EMA (15 pts) — basic uptrend membership
     if last > ema50:
-        score += 20
+        score += 15
     components["price_above_50ema"] = last > ema50
 
-    # Component 2: 50EMA above 200EMA — golden cross / Stage 2 confirm (30 pts)
+    # Component 2: 50EMA above 200EMA — golden cross / Stage 2 confirm (25 pts)
     golden = ema50 > ema200
     if golden:
-        score += 30
+        score += 25
     components["golden_cross"] = golden
 
-    # Component 3: 50EMA sloping up (20 pts)
+    # Component 3: 50EMA sloping up (15 pts)
     slope50 = ema50_30d_ago is not None and ema50 > ema50_30d_ago
     if slope50:
-        score += 20
+        score += 15
     components["ema50_rising"] = slope50
 
-    # Component 4: 200EMA sloping up (20 pts) — long-term trend health
+    # Component 4: 200EMA sloping up (15 pts) — long-term trend health
     slope200 = ema200_30d_ago is not None and ema200 > ema200_30d_ago
     if slope200:
-        score += 20
+        score += 15
     components["ema200_rising"] = slope200
 
-    # Component 5: extension from 50EMA — penalize blowoff tops (10 pts)
+    # Component 5: proximity to 52-week high (20 pts) — Minervini template.
+    # Within 5% of the high is prime; degrade through 15% and 25% bands.
+    if pct_of_52w_high >= 0.95:
+        score += 20
+    elif pct_of_52w_high >= 0.85:
+        score += 14
+    elif pct_of_52w_high >= 0.75:
+        score += 8
+    # >25% below the 52w high = not a leader; no points
+    components["pct_of_52w_high"] = round(pct_of_52w_high * 100, 1)
+    components["pct_above_52w_low"] = round(pct_above_52w_low * 100, 1)
+
+    # Component 6: extension from 50EMA — penalize blowoff tops (10 pts)
     extension = last / ema50
     if extension <= 1.10:
         score += 10
@@ -101,8 +123,10 @@ def score_stage2(prices: dict | None) -> tuple[float, dict]:
     components["price_vs_ema50_pct"] = round((extension - 1) * 100, 1)
 
     flag = None
-    if golden and slope50 and slope200 and last > ema50 and extension <= 1.20:
+    if golden and slope50 and slope200 and last > ema50 and extension <= 1.20 and pct_of_52w_high >= 0.85:
         flag = "stage2_clean"
+    elif pct_of_52w_high >= 0.98 and golden:
+        flag = "new_52w_high"
     elif extension > 1.40:
         flag = "extended"
     elif not golden:
@@ -111,6 +135,8 @@ def score_stage2(prices: dict | None) -> tuple[float, dict]:
     return _clip(score), {
         "ema50": round(ema50, 2),
         "ema200": round(ema200, 2),
+        "high_52w": round(high_52w, 2),
+        "low_52w": round(low_52w, 2),
         **components,
         "flag": flag,
     }
@@ -251,10 +277,7 @@ def score_relative_strength(prices: dict | None, spy_prices: dict | None) -> tup
 
     flag = None
     if rs_1m > 0 and rs_3m > 0 and rs_6m > 0:
-        if rs_3m >= 20:
-            flag = "rs_leader"
-        else:
-            flag = "rs_positive"
+        flag = "rs_leader" if rs_3m >= 20 else "rs_positive"
     elif rs_1m < -10 and rs_3m < -10:
         flag = "rs_laggard"
 
@@ -403,6 +426,22 @@ def composite_swing(factors: dict, weights: dict[str, float] | None = None) -> f
     w = weights or SWING_WEIGHTS
     total = sum(factors[k]["score"] * w[k] for k in SWING_WEIGHTS)
     return round(total, 1)
+
+
+def compute_price_only(prices: dict | None, spy_prices: dict | None = None) -> float:
+    """Cheap price-only swing score for the large-universe prefilter.
+
+    Uses only the three factors that need OHLCV alone (stage2, breakout, RS) —
+    75% of the full composite weight — renormalized to 0-100. Lets us rank a
+    ~500-name universe on one price fetch each before paying for the expensive
+    catalyst/insider enrichment on the survivors.
+    """
+    s_st, _ = score_stage2(prices)
+    s_br, _ = score_breakout_volume(prices)
+    s_rs, _ = score_relative_strength(prices, spy_prices)
+    w = SWING_WEIGHTS
+    denom = w["stage2"] + w["breakout"] + w["rs"]
+    return round((s_st * w["stage2"] + s_br * w["breakout"] + s_rs * w["rs"]) / denom, 1)
 
 
 def collect_swing_flags(factors: dict) -> list[str]:

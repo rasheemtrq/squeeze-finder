@@ -95,6 +95,13 @@ export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
             </div>
           </td>
         ))}
+        {/* New: Catalyst kind + FTD for better signal visibility */}
+        <td className="px-3 py-3 mono text-[10px] text-[var(--muted)]">
+          {((r as any).catalysts?.kind || (r.factors.catalyst?.signals as any)?.kind || '').slice(0, 10) || '–'}
+        </td>
+        <td className="px-3 py-3 mono text-[10px] text-right">
+          {((r as any).ftd?.latest_ftd) ? ((r as any).ftd.latest_ftd / 1000).toFixed(0) + 'k' : '–'}
+        </td>
         <td className="px-3 py-3">
           <div className="flex flex-wrap gap-1 max-w-[200px]">
             {r.flags.slice(0, 3).map((f) => (

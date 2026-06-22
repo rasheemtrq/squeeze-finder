@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from src.config import FINNHUB_API_KEY
 from src.research.historical_squeezes import run as run_historical_squeezes
 from src.research.reddit_strategies import run as run_reddit_strategies
 from src.scanner import scan, score_ticker
 from src.score.backtest import evaluate as backtest_evaluate
 from src.score.calibration import evaluate as calibration_evaluate
+from src.score.swing_backtest import evaluate as swing_backtest_evaluate
+from src.swing_scanner import swing_scan
 
 app = typer.Typer(help="squeeze-finder CLI")
 console = Console()
@@ -21,44 +25,85 @@ console = Console()
 def scan_cmd(
     limit: int = 20,
     min_score: float = 0,
+    min_pressure: float = 0,
+    sort_by: str = typer.Option("composite", "--sort-by", help="composite (default) or pressure for imminent setups"),
     tickers: str | None = typer.Option(None, help="comma-separated override"),
+    timings: bool = typer.Option(False, "--timings", help="Show per-source fetch timings"),
+    alphavantage: bool = typer.Option(
+        False, "--alphavantage", help="Enrich top results with Alpha Vantage (fundamentals + news) - uses free tier"
+    ),
 ) -> None:
-    """Run the squeeze scan."""
+    """Run the squeeze scan. Use --sort-by pressure to rank best short squeeze setups by the multiplicative pressure model (L·G·S)."""
     universe = [t.strip().upper() for t in tickers.split(",")] if tickers else None
     with console.status("scanning..."):
-        result = scan(tickers=universe, min_score=min_score, limit=limit)
+        result = scan(
+            tickers=universe,
+            min_score=min_score,
+            min_pressure=min_pressure,
+            limit=limit,
+            sort_by=sort_by,
+        )
 
-    table = Table(title=f"top {result['returned']} of {result['scored']} scored")
-    table.add_column("rank")
+    sort_label = "pressure" if sort_by in ("pressure", "pressure_score") else "composite"
+    title = f"top {result['returned']} of {result['scored']} · sort={sort_label} · min_score={min_score} min_pressure={min_pressure}"
+    if alphavantage:
+        title += " · +alphavantage"
+    if FINNHUB_API_KEY:
+        title += " · +finnhub"
+    table = Table(title=title)
+    table.add_column("rank", justify="right")
     table.add_column("ticker")
     table.add_column("score", justify="right")
-    table.add_column("sent", justify="right")
-    table.add_column("opts", justify="right")
-    table.add_column("si", justify="right")
-    table.add_column("ta", justify="right")
+    table.add_column("press", justify="right")
     table.add_column("cat", justify="right")
+    table.add_column("cat_kind", justify="left")
+    table.add_column("ftd", justify="right")
     table.add_column("flags")
     for i, r in enumerate(result["results"], 1):
         f = r["factors"]
+        ps = r.get("pressure_score") or {}
+        pscore = ps.get("score", "–") if isinstance(ps, dict) else "–"
+        cat = f.get("catalyst", {})
+        cat_score = cat.get("score", "–")
+        cat_kind = (cat.get("signals") or {}).get("kind") or (r.get("catalysts") or {}).get("kind") or ""
+        ftd_data = (r.get("ftd") or {})
+        ftd_str = str(ftd_data.get("latest_ftd", "–")) if ftd_data.get("latest_ftd") else "–"
         table.add_row(
             str(i),
             r["ticker"],
             f"{r['score']}",
-            f"{f['sentiment']['score']}",
-            f"{f['options']['score']}",
-            f"{f['si']['score']}",
-            f"{f['ta']['score']}",
-            f"{f['catalyst']['score']}",
-            ", ".join(r["flags"]),
+            f"{pscore}",
+            f"{cat_score}",
+            cat_kind[:12],
+            ftd_str,
+            ", ".join(r["flags"])[:50],
         )
     console.print(table)
 
 
 @app.command()
 def analyze(ticker: str) -> None:
-    """Score a single ticker."""
+    """Score a single ticker with explanation of why it ranks."""
     result = score_ticker(ticker.upper())
     console.print_json(json.dumps(result, default=str))
+
+    # Simple "why" explanation
+    if not result.get("excluded"):
+        f = result.get("factors", {})
+        flags = result.get("flags", [])
+        ps = result.get("pressure_score", {})
+        top_factors = sorted(
+            [(k, v.get("score", 0)) for k, v in f.items()],
+            key=lambda x: x[1], reverse=True
+        )[:3]
+        explanation = f"Top drivers: {', '.join([f'{k}:{s}' for k,s in top_factors])}. "
+        if ps.get("score", 0) > 40:
+            explanation += "Strong pressure (L·G·S) — good for timing. "
+        if any("ftd" in str(fl).lower() or "settlement" in str(fl).lower() for fl in flags):
+            explanation += "FTD pressure detected (best free signal). "
+        if any("clinical" in str(fl).lower() or "fda" in str(fl).lower() for fl in flags):
+            explanation += "Clinical catalyst in window. "
+        console.print(f"\n[bold cyan]Why {ticker.upper()} ranks:[/bold cyan] {explanation}")
 
 
 @app.command()
@@ -246,7 +291,6 @@ def research_reddit(
     patterns people TALK about, not necessarily patterns that statistically work.
     Use the synthesis to identify GAPS in what we already model, not as ground truth.
     """
-    from pathlib import Path
 
     from src.research.reddit_strategies import harvest as reddit_harvest
     from src.research.reddit_strategies import synthesize_with_haiku
@@ -318,6 +362,170 @@ def research_reddit(
     if syn.get("honest_caveats"):
         console.print()
         console.print(f"[dim italic]{syn['honest_caveats']}[/dim italic]")
+
+
+@app.command()
+def ftd(refresh: bool = typer.Option(False, "--refresh", help="Download latest SEC FTD files and rebuild local index"),
+        force: bool = typer.Option(False, "--force", help="Force re-download even if files exist")) -> None:
+    """Manage the SEC Fails-to-Deliver (FTD) dataset — one of the best free signals for settlement pressure."""
+    from src.data import ftd as ftd_mod
+
+    if refresh:
+        with console.status("Refreshing SEC FTD data (this can take a minute on first run)..."):
+            result = ftd_mod.refresh(force=force)
+        console.print("[green]FTD refresh complete[/green]")
+        console.print(f"  Downloaded: {result.get('downloaded', [])}")
+        console.print(f"  Tickers in index: {result.get('index_tickers', 0)}")
+        console.print(f"  as_of: {result.get('as_of')}")
+    else:
+        console.print("FTD data is a bulk official SEC dataset (published ~2× per month).")
+        console.print("Run with --refresh to ingest the latest available files.")
+        console.print("The scanner will then use fast local lookups automatically.")
+
+
+@app.command("swing")
+def swing_cmd(
+    limit: int = 20,
+    min_score: float = 0,
+    tickers: str | None = typer.Option(None, help="comma-separated override"),
+    mode: str = typer.Option("liquid", "--mode", help="liquid (S&P500+leaders), dynamic (meme/WSB), or core"),
+    prefilter: int = typer.Option(60, "--prefilter", help="Stage-1 survivors enriched in liquid mode"),
+) -> None:
+    """Run the SWING scan (2-4 week trend-continuation holds) with trade plans.
+
+    Each result carries an ATR-based plan: entry, stop under structural support,
+    R-multiple targets, and an account-risk-normalized position size. Ranked by
+    the swing composite, nudged toward tight-risk (high R:R) setups.
+    """
+    universe = [t.strip().upper() for t in tickers.split(",")] if tickers else None
+    with console.status("swing scanning..."):
+        result = swing_scan(
+            tickers=universe,
+            min_score=min_score,
+            limit=limit,
+            universe_mode=mode,
+            prefilter_n=prefilter,
+        )
+
+    reg = result.get("regime") or {}
+    pf = f" · prefiltered {result['universe_size']}→{result['prefiltered_to']}" if result.get("prefiltered_to") else ""
+    title = (
+        f"swing [{result.get('universe_mode', mode)}] · top {result['returned']} of {result['scored']}{pf} · "
+        f"regime={reg.get('regime', '?')} (×{reg.get('multiplier', 1.0)})"
+    )
+    table = Table(title=title)
+    for col, just in [
+        ("rank", "right"), ("ticker", "left"), ("score", "right"),
+        ("st", "right"), ("bo", "right"), ("rs", "right"),
+        ("entry", "right"), ("stop", "right"), ("risk%", "right"),
+        ("T(3R)", "right"), ("pos%", "right"), ("flags", "left"),
+    ]:
+        table.add_column(col, justify=just)
+
+    for i, r in enumerate(result["results"], 1):
+        f = r["factors"]
+        p = r.get("trade_plan") or {}
+        targets = p.get("targets") or [None, None]
+        table.add_row(
+            str(i),
+            r["ticker"],
+            f"{r['score']}",
+            f"{f['stage2']['score']:.0f}",
+            f"{f['breakout']['score']:.0f}",
+            f"{f['rs']['score']:.0f}",
+            f"{p.get('entry', '–')}",
+            f"{p.get('stop', '–')}",
+            f"{p.get('risk_pct', '–')}",
+            f"{targets[-1] if targets[-1] else '–'}",
+            f"{p.get('position_pct', '–')}",
+            ", ".join(r["flags"])[:46],
+        )
+    console.print(table)
+    console.print(
+        "[dim]pos% = allocation that risks 1% of account if the stop hits. "
+        "Plans are mechanical, not advice — size to your own risk budget.[/dim]"
+    )
+
+
+@app.command("swing-backtest")
+def swing_backtest_cmd(
+    window: int = typer.Option(14, help="hold window in calendar days (try 10 and 20 for 2-4wk)"),
+) -> None:
+    """Realized expectancy (in R) + final-return by swing-score decile.
+
+    Replays each recorded swing pick against forward bars: stop first (−1R),
+    target first (+R), or mark-to-market at the horizon. Says UNDERPOWERED
+    until enough scan-days have accrued to mean anything.
+    """
+    result = swing_backtest_evaluate(window_days=window)
+    if not result.get("evaluated"):
+        console.print(f"[yellow]{result.get('note', 'no data')}[/yellow]")
+        console.print(f"snapshots scanned: {result.get('snapshots', 0)}")
+        return
+
+    o = result.get("overall_expectancy") or {}
+    console.print(
+        f"[bold]swing backtest[/bold]  window={result['window_days']}d  "
+        f"evaluated={result['evaluated']}  scan-days={result.get('scan_days')}"
+    )
+    console.print(
+        f"expectancy={o.get('expectancy_r', '–')}R  win_rate={o.get('win_rate_r', '–')}  "
+        f"avg_win={o.get('avg_win_r', '–')}R  avg_loss={o.get('avg_loss_r', '–')}R  "
+        f"stop_rate={o.get('stop_rate', '–')}  "
+        f"IC(score↔ret)={result.get('spearman_ic_score_vs_return')}  "
+        f"top-decile lift={result.get('top_decile_expectancy_lift')}x"
+    )
+    if result.get("note"):
+        console.print(f"[yellow]{result['note']}[/yellow]")
+
+    table = Table(title="expectancy by swing-score decile")
+    for col in ["decile", "n", "score range", "avg ret %", "win rate", "exp (R)", "stop %", "target %", "avg DD %"]:
+        table.add_column(col, justify="right" if col != "score range" else "left")
+    for d in result["deciles"]:
+        table.add_row(
+            str(d["decile"]), str(d["n"]),
+            f"{d['score_range'][0]}–{d['score_range'][1]}",
+            f"{d['avg_return_pct']:+.2f}",
+            f"{d['win_rate']:.0%}",
+            f"{d['expectancy_r'] if d['expectancy_r'] is not None else '–'}",
+            f"{d['stop_rate']:.0%}" if d['stop_rate'] is not None else "–",
+            f"{d['target_rate']:.0%}" if d['target_rate'] is not None else "–",
+            f"{d['avg_max_drawdown_pct']:+.1f}",
+        )
+    console.print(table)
+
+    if result.get("flag_performance"):
+        ftable = Table(title="flag-level expectancy (n≥5)")
+        for col in ["flag", "n", "avg ret %", "exp (R)"]:
+            ftable.add_column(col, justify="right" if col != "flag" else "left")
+        for r in result["flag_performance"]:
+            ftable.add_row(
+                r["flag"], str(r["n"]), f"{r['avg_return_pct']:+.2f}",
+                f"{r['expectancy_r'] if r['expectancy_r'] is not None else '–'}",
+            )
+        console.print(ftable)
+
+
+@app.command("accrue")
+def accrue_cmd(
+    with_squeeze: bool = typer.Option(False, "--with-squeeze", help="also run + record the squeeze scan"),
+) -> None:
+    """Run scans and record forward-return snapshots. The daily fidelity engine.
+
+    Wire this to a daily cron (market days, after close). Each run records one
+    snapshot per scored name; the backtest reads them once they age past the
+    hold window. This accrual is the only thing that makes the scanner
+    high-fidelity — free data has no history to backtest these signals against.
+    """
+    swing = swing_scan(force_refresh=True, universe_mode="liquid", limit=200, prefilter_n=80)
+    console.print(
+        f"[green]swing[/green] mode={swing.get('universe_mode')} "
+        f"universe={swing['universe_size']} prefiltered→{swing.get('prefiltered_to')} "
+        f"scored={swing['scored']} · recorded snapshot for {swing['as_of'][:10]}"
+    )
+    if with_squeeze:
+        sq = scan(force_refresh=True, limit=200)
+        console.print(f"[green]squeeze[/green] scored={sq['scored']} recorded snapshot")
 
 
 @app.command()

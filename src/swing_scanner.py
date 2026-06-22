@@ -20,19 +20,21 @@ the 11 squeeze data sources are skipped.
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import hashlib
 import json
 import threading
 from datetime import UTC, datetime
 from typing import Any
 
-from src.config import DEFAULT_UNIVERSE
+from src.config import DEFAULT_UNIVERSE, INNER_FETCH_CONCURRENCY
 from src.data import (
     _cache,
     catalysts,
     fundamentals,
     insiders,
     inst_holders,
+    liquid_universe,
     prices,
 )
 from src.data import (
@@ -41,10 +43,13 @@ from src.data import (
 from src.data import universe as universe_builder
 from src.data.prices import DataUnavailable
 from src.score.composite import is_red_flag
+from src.score.risk import build_trade_plan, risk_quality_multiplier
+from src.score.swing_backtest import record_swing_snapshot
 from src.score.swing_factors import (
     SWING_WEIGHTS,
     collect_swing_flags,
     composite_swing,
+    compute_price_only,
     compute_swing,
 )
 
@@ -69,15 +74,21 @@ def fetch_swing_bundle(ticker: str) -> dict[str, Any]:
         "insiders": lambda: insiders.fetch(ticker),
         "inst_holders": lambda: inst_holders.fetch(ticker),
     }
-    for name, fn in sources.items():
-        try:
-            bundle[name] = fn()
-        except DataUnavailable as e:
-            bundle[name] = None
-            bundle["errors"][name] = str(e)
-        except Exception as e:
-            bundle[name] = None
-            bundle["errors"][name] = f"unexpected: {e}"
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=INNER_FETCH_CONCURRENCY
+    ) as pool:
+        future_to_name = {pool.submit(fn): name for name, fn in sources.items()}
+        for future in concurrent.futures.as_completed(future_to_name):
+            name = future_to_name[future]
+            try:
+                bundle[name] = future.result()
+            except DataUnavailable as e:
+                bundle[name] = None
+                bundle["errors"][name] = str(e)
+            except Exception as e:
+                bundle[name] = None
+                bundle["errors"][name] = f"unexpected: {e}"
     return bundle
 
 
@@ -100,8 +111,16 @@ def score_ticker_swing(
     elif red_flag and excluded:
         flags.append(f"risk:{red_flag}")
 
-    fund = bundle.get("fundamentals") or {}
+    # Concrete trade plan (entry/stop/targets/size) + R:R-quality coupling.
+    # Tight-risk setups earn more R per move, so nudge the rank toward them;
+    # extended setups (wide stop) get demoted. This is the reliability lever.
     prices_data = bundle.get("prices") or {}
+    trade_plan = build_trade_plan(prices_data)
+    if trade_plan:
+        score = round(score * risk_quality_multiplier(trade_plan), 1)
+        flags.append(f"risk:{trade_plan['grade']}_stop")
+
+    fund = bundle.get("fundamentals") or {}
 
     return {
         "ticker": ticker,
@@ -110,6 +129,7 @@ def score_ticker_swing(
         "market_cap": fund.get("market_cap"),
         "score": score,
         "factors": factors,
+        "trade_plan": trade_plan,
         "flags": flags,
         "excluded": excluded,
         "exclude_reason": red_flag if excluded else None,
@@ -136,6 +156,35 @@ def _maybe_refresh_in_background(cache_key: str, **scan_kwargs: Any) -> None:
     threading.Thread(target=_run, daemon=True, name=f"swing-refresh-{cache_key}").start()
 
 
+def _prefilter_price_only(
+    universe: list[str], spy_prices: dict | None, top_n: int, max_workers: int
+) -> list[str]:
+    """Stage 1: rank the universe on a price-only swing score (one fetch each).
+
+    Returns the top_n tickers by the renormalized stage2/breakout/RS score, so
+    only the strongest trends pay for the expensive Stage-2 enrichment. Names
+    that fail to fetch or score 0 are dropped.
+    """
+    scored: list[tuple[str, float]] = []
+
+    def _score(t: str) -> tuple[str, float] | None:
+        try:
+            p = prices.fetch(t, period="1y")
+        except Exception:
+            return None
+        s = compute_price_only(p, spy_prices)
+        return (t, s) if s > 0 else None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for fut in concurrent.futures.as_completed([pool.submit(_score, t) for t in universe]):
+            r = fut.result()
+            if r:
+                scored.append(r)
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [t for t, _ in scored[:top_n]]
+
+
 def swing_scan(
     tickers: list[str] | None = None,
     weights: dict | None = None,
@@ -144,22 +193,38 @@ def swing_scan(
     limit: int = 25,
     force_refresh: bool = False,
     dynamic_universe: bool = True,
+    universe_mode: str = "liquid",
+    prefilter_n: int = 60,
 ) -> dict[str, Any]:
     if tickers:
         universe = tickers
         universe_sources: dict[str, list[str]] = {"override": list(tickers)}
-    elif dynamic_universe:
-        built = universe_builder.build(DEFAULT_UNIVERSE)
-        universe = built["tickers"]
-        universe_sources = built["sources"]
+        mode = "override"
     else:
-        universe = DEFAULT_UNIVERSE
-        universe_sources = {"core": list(DEFAULT_UNIVERSE)}
+        mode = universe_mode if universe_mode else ("dynamic" if dynamic_universe else "core")
+        if mode == "liquid":
+            built = liquid_universe.build()
+            universe = built["tickers"]
+            universe_sources = built["sources"]
+        elif mode == "dynamic":
+            built = universe_builder.build(DEFAULT_UNIVERSE)
+            universe = built["tickers"]
+            universe_sources = built["sources"]
+        else:
+            mode = "core"
+            universe = DEFAULT_UNIVERSE
+            universe_sources = {"core": list(DEFAULT_UNIVERSE)}
     weights = weights or SWING_WEIGHTS
 
     cache_key = hashlib.sha1(
         json.dumps(
-            {"universe": universe, "weights": weights, "min_score": min_score, "limit": limit},
+            {
+                "universe": universe,
+                "weights": weights,
+                "min_score": min_score,
+                "limit": limit,
+                "prefilter_n": prefilter_n,
+            },
             sort_keys=True,
         ).encode()
     ).hexdigest()[:16]
@@ -180,7 +245,8 @@ def swing_scan(
                         max_workers=max_workers,
                         min_score=min_score,
                         limit=limit,
-                        dynamic_universe=dynamic_universe,
+                        universe_mode=mode,
+                        prefilter_n=prefilter_n,
                     )
                 return cached
 
@@ -196,12 +262,21 @@ def swing_scan(
     except Exception as e:
         regime = {"regime": "unknown", "multiplier": 1.0, "error": str(e)}
 
+    # Stage 1 — for large universes, prefilter on a cheap price-only score so we
+    # only pay for full enrichment on the strongest trends.
+    scan_list = universe
+    prefiltered = False
+    if not tickers and len(universe) > prefilter_n:
+        scan_list = _prefilter_price_only(universe, spy_prices, prefilter_n, max_workers)
+        prefiltered = True
+
     results = []
     errors = []
 
+    # Stage 2 — full scoring + trade plan on the survivors.
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_map = {
-            pool.submit(score_ticker_swing, t, spy_prices, weights): t for t in universe
+            pool.submit(score_ticker_swing, t, spy_prices, weights): t for t in scan_list
         }
         for fut in concurrent.futures.as_completed(future_map):
             t = future_map[fut]
@@ -226,8 +301,10 @@ def swing_scan(
 
     output = {
         "as_of": datetime.now(UTC).isoformat(),
+        "universe_mode": mode,
         "universe_size": len(universe),
         "universe_sources": universe_sources,
+        "prefiltered_to": len(scan_list) if prefiltered else None,
         "scored": len(results),
         "returned": len(filtered),
         "weights": weights,
@@ -238,4 +315,11 @@ def swing_scan(
         "cached": False,
     }
     _cache.put("swing_scans", cache_key, output)
+
+    # Persist a forward-return snapshot so swing fidelity can accrue over time.
+    # Records the full scored set (not just the returned top-N) so the backtest
+    # has score dispersion to bucket. Best-effort: never fail a scan on this.
+    with contextlib.suppress(Exception):
+        record_swing_snapshot({**output, "results": results})
+
     return output

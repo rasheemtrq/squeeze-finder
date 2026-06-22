@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 import yfinance as yf
 
-from src.config import CACHE_TTL
+from src.config import CACHE_TTL, FINNHUB_API_KEY
 from src.data import _cache
+from src.data.finnhub import fetch_quote as finnhub_quote
+
+# Quiet yfinance's noisy "possibly delisted" / no data warnings that pollute
+# API logs during prewarm and scans for tickers that have died (common in
+# meme/universe lists). Failures still raise DataUnavailable cleanly.
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 
 class DataUnavailable(Exception):
@@ -68,12 +75,26 @@ def fetch(ticker: str, period: str = "6mo", force_refresh: bool = False) -> dict
         for _, row in hist.iterrows()
     ]
     latest = bars[-1]
+    close_price = latest["close"]
+    volume = latest["volume"]
+
+    # Prefer Finnhub for the live quote when available (much more reliable than yfinance)
+    if FINNHUB_API_KEY:
+        try:
+            q = finnhub_quote(ticker)
+            if q and q.get("current_price"):
+                close_price = q["current_price"]
+                # Keep the bar volume but we now have a fresher price
+        except Exception:
+            pass  # silent fallback
+
     full = {
         "ticker": ticker,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "bars": bars,
-        "close": latest["close"],
-        "volume": latest["volume"],
+        "close": close_price,
+        "volume": volume,
+        "live_quote": FINNHUB_API_KEY and "finnhub" or None,  # marker
     }
     _cache.put("prices", ticker, full)
     return _slice(full, period)

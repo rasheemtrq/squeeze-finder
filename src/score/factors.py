@@ -276,14 +276,18 @@ def score_si(
     finra: dict | None = None,
     insiders: dict | None = None,
     inst_holders: dict | None = None,
+    ftd: dict | None = None,
 ) -> tuple[float, dict]:
     """
     Combines structural SI (yf: % float, DTC) with FINRA daily short-volume
     momentum (trend + latest ratio), an insider-buying contrarian bonus from
-    SEC Form 4, and a 13D/13G institutional-holder lift. Insider open-market
-    purchases by directors / officers / 10%-owners on a heavily-shorted name
-    is the textbook squeeze precondition; a fresh 13D filing (5%+ activist)
-    is the institutional-scale version of the same signal.
+    SEC Form 4, a 13D/13G institutional-holder lift, and now SEC FTD
+    (Fails-to-Deliver) settlement pressure — the best free signal for
+    naked short / hard-to-borrow accumulation.
+
+    FTD data is the highest-signal free addition for "best short squeeze
+    setups" because persistent or spiking fails-to-deliver on a high-SI
+    name is direct evidence of short covering difficulty.
     """
     if not fund:
         return 0.0, {"reason": "no_data"}
@@ -292,6 +296,7 @@ def score_si(
     dtc = fund.get("short_ratio") or 0
     si_date = fund.get("shares_short_date")
     sector = fund.get("sector")
+    float_shares = fund.get("float_shares") or 0
 
     # Sector-adjusted SI: a 20% SI biotech is base-rate; a 20% SI mega-cap
     # tech is extraordinary. si_pct_normalized maps raw SI%float onto a
@@ -427,10 +432,34 @@ def score_si(
                     recency_mult = 0.2
             inst_component = min(15.0, base * recency_mult)
 
+    # SEC FTD (Fails-to-Deliver) settlement pressure — the best free signal
+    # we added for "best short squeeze setups". Large or rapidly rising FTDs
+    # on a high-SI name are direct evidence of shorts having trouble covering.
+    ftd_component = 0.0
+    ftd_info: dict = {}
+    if ftd:
+        latest_ftd = ftd.get("latest_ftd") or 0
+        avg_ftd = ftd.get("avg_ftd_recent") or 0
+        ftd_count = ftd.get("ftd_count") or 0
+        ftd_info = {
+            "ftd_latest": latest_ftd,
+            "ftd_avg_recent": avg_ftd,
+            "ftd_observations": ftd_count,
+        }
+        if float_shares > 0 and latest_ftd > 0:
+            ftd_ratio = latest_ftd / float_shares
+            # 0.3%+ of float in fails = real settlement pressure
+            if ftd_ratio >= 0.003:
+                ftd_component = min(20.0, ftd_ratio * 3000)  # scale to ~20 pts max
+            # Stronger velocity + trend (rising over multiple observations)
+            if avg_ftd > 0 and latest_ftd > avg_ftd * 1.4:
+                ftd_component += 8
+            if ftd_count >= 5 and latest_ftd > avg_ftd * 1.8:
+                ftd_component += 5  # accelerating settlement stress
+
     raw_si_score = (
-        pct_component + dtc_component + finra_component + insider_component + inst_component
+        pct_component + dtc_component + finra_component + insider_component + inst_component + ftd_component
     )
-    float_shares = fund.get("float_shares") or 0
     float_mult = 1.0
     if float_shares > 0 and raw_si_score >= 30:
         if float_shares < 5_000_000:
@@ -439,7 +468,22 @@ def score_si(
             float_mult = 1.20
         elif float_shares < 50_000_000:
             float_mult = 1.10
-    score = _clip(raw_si_score * float_mult - insider_dump_demote)
+
+    # Institutional ownership + low float congestion amplifier (P0 refinement)
+    # Reddit corpus: high SI + float <50M + >60-70% inst held = hardest to borrow,
+    # biggest forced-cover multiplier on short covering. Uses yf data we already
+    # fetch but previously dropped. Applied only when a real SI signal exists.
+    held_inst = fund.get("held_percent_institutions") or 0
+    held_insider = fund.get("held_percent_insiders") or 0
+    congestion_mult = 1.0
+    if held_inst and float_shares > 0 and raw_si_score >= 25:
+        if held_inst >= 0.65 and float_shares < 100_000_000:
+            congestion_mult = 1.30
+        elif held_inst >= 0.55 and float_shares < 150_000_000:
+            congestion_mult = 1.15
+        elif held_inst >= 0.50 and float_shares < 300_000_000:
+            congestion_mult = 1.08
+    score = _clip(raw_si_score * float_mult * congestion_mult - insider_dump_demote)
 
     stale = False
     si_age_days: int | None = None
@@ -494,6 +538,21 @@ def score_si(
         or (finra_info.get("finra_latest_short_ratio", 0) >= 0.40)
     ):
         flag = "tiny_float_squeeze"
+    # SEC FTD settlement pressure flag (new best free signal)
+    if ftd and ftd.get("latest_ftd", 0) > 0 and float_shares > 0:
+        ftd_ratio = ftd["latest_ftd"] / float_shares
+        if ftd_ratio >= 0.005:
+            flag = "high_settlement_pressure"
+        elif ftd.get("avg_ftd_recent", 0) > 0 and ftd["latest_ftd"] > ftd["avg_ftd_recent"] * 1.5:
+            flag = "rising_ftd_pressure"
+    # Institutional lock-up + low float on SI signal (P0 refinement). Stronger
+    # than plain tiny-float per Reddit corpus (harder borrow, less supply).
+    # Takes precedence as the highest-conviction "best setup" precondition.
+    if congestion_mult >= 1.15 and (
+        (si_pct and si_pct >= 0.12)
+        or (finra_info.get("finra_latest_short_ratio", 0) >= 0.35)
+    ):
+        flag = "institutional_lockup"
     if si_age_days is not None and si_age_days > 30 and not finra_info:
         flag = "si_stale"
     elif stale and not finra_info:
@@ -508,12 +567,16 @@ def score_si(
         "stale_yf": stale,
         "float_shares": float_shares,
         "float_mult": round(float_mult, 2),
+        "held_percent_institutions": round(held_inst, 4) if held_inst else None,
+        "held_percent_insiders": round(held_insider, 4) if held_insider else None,
+        "congestion_mult": round(congestion_mult, 2),
         "sector": sector,
         "sector_si_median": _s_med,
         "sector_si_p90": _s_p90,
         **finra_info,
         **insider_info,
         **inst_info,
+        **ftd_info,
         "flag": flag,
     }
 
@@ -618,6 +681,10 @@ def score_catalyst(cat: dict | None) -> tuple[float, dict]:
         if next_event.get("hour", "").lower() == "amc":
             score = min(100.0, score + 5.0)
 
+    # Quality boost for clinical / binary events (new richer catalysts)
+    if kind in ("clinical_readout", "fda_pdufa", "clinical"):
+        score = min(100.0, score * 1.15)  # clinical events often more binary than earnings
+
     flag = None
     if dte <= 7:
         flag = f"{kind}_imminent" if kind != "earnings" else "imminent"
@@ -644,6 +711,7 @@ def compute_all(bundle: dict[str, Any]) -> dict[str, Any]:
         bundle.get("finra"),
         bundle.get("insiders"),
         bundle.get("inst_holders"),
+        bundle.get("ftd"),
     )
     s_ta, sig_ta = score_ta(bundle.get("prices"))
     s_cat, sig_cat = score_catalyst(bundle.get("catalysts"))

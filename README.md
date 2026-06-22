@@ -74,6 +74,8 @@ data/                         # cache, ideas log, deepdives (gitignored)
 
 Override per-request: `/api/scan?w_sentiment=0.3&w_options=0.3&...` (auto-normalized).
 
+Rank by `--sort-by pressure` (or `?sort_by=pressure`) to surface *best short squeeze setups* via the multiplicative pressure model (L·G·S geometric mean) instead of the linear composite. See `squeeze-thesis` skill.
+
 Reddit/WSB sentiment is deferred. To enable: add Reddit app keys to `.env`, build `src/data/reddit.py` against the PRAW contract in `.claude/skills/data-sources/SKILL.md`, then extend `score_sentiment` in `src/score/factors.py` and bump weight back to 30% (SI → 20%).
 
 ## Disclaimer
