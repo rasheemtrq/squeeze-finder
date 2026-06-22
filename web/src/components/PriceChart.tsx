@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
-  CandlestickSeries,
+  AreaSeries,
   HistogramSeries,
   LineStyle,
   PriceScaleMode,
@@ -19,14 +19,14 @@ const VERCEL = {
   bg: "#0a0a0a",
   text: "#8f8f8f",
   grid: "rgba(255,255,255,0.04)",
-  up: "#6ee787",
-  down: "#f56e7d",
+  line: "#3b9eff",
+  areaTop: "rgba(59,158,255,0.22)",
+  areaBottom: "rgba(59,158,255,0.0)",
   entry: "#ededed",
-  stop: "#f56e7d",
-  breakout: "#f5d16e",
-  target2: "#6ee787",
-  target5: "#3bd36f",
-  target10: "#0070f3",
+  sl: "#f56e7d",
+  tp1: "#6ee787",
+  tp2: "#3bd36f",
+  tp3: "#0070f3",
 };
 
 const PERIODS = [
@@ -39,7 +39,7 @@ const PERIODS = [
 export function PriceChart({ symbol }: { symbol: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const priceRef = useRef<ISeriesApi<"Area"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
   const [data, setData] = useState<ChartData | null>(null);
@@ -80,6 +80,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
       rightPriceScale: {
         borderColor: "#1f1f1f",
         mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+        scaleMargins: { top: 0.12, bottom: 0.18 },
       },
       timeScale: {
         borderColor: "#1f1f1f",
@@ -93,51 +94,53 @@ export function PriceChart({ symbol }: { symbol: string }) {
     });
     chartRef.current = chart;
 
-    const candles = chart.addSeries(CandlestickSeries, {
-      upColor: VERCEL.up,
-      downColor: VERCEL.down,
-      borderUpColor: VERCEL.up,
-      borderDownColor: VERCEL.down,
-      wickUpColor: VERCEL.up,
-      wickDownColor: VERCEL.down,
+    // Smooth line (area) of close price — the "potential gains" path.
+    const price = chart.addSeries(AreaSeries, {
+      lineColor: VERCEL.line,
+      topColor: VERCEL.areaTop,
+      bottomColor: VERCEL.areaBottom,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
     });
-    candleRef.current = candles;
+    priceRef.current = price;
 
     const volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "vol",
-      color: "rgba(143,143,143,0.35)",
+      color: "rgba(143,143,143,0.30)",
     });
     chart.priceScale("vol").applyOptions({
-      scaleMargins: { top: 0.82, bottom: 0 },
+      scaleMargins: { top: 0.85, bottom: 0 },
     });
     volumeRef.current = volume;
 
     const toUTC = (ymd: string): UTCTimestamp =>
       (Math.floor(new Date(ymd + "T00:00:00Z").getTime() / 1000) as UTCTimestamp);
 
-    candles.setData(
-      data.bars.map((b) => ({
-        time: toUTC(b.date),
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      })),
+    price.setData(
+      data.bars.map((b) => ({ time: toUTC(b.date), value: b.close })),
     );
     volume.setData(
       data.bars.map((b) => ({
         time: toUTC(b.date),
         value: b.volume,
-        color: b.close >= b.open ? "rgba(110,231,135,0.25)" : "rgba(245,110,125,0.25)",
+        color: b.close >= b.open ? "rgba(110,231,135,0.22)" : "rgba(245,110,125,0.22)",
       })),
     );
 
-    const addLine = (price: number, color: string, title: string, dashed = false) => {
-      candles.createPriceLine({
-        price,
+    const addLine = (
+      linePrice: number,
+      color: string,
+      title: string,
+      dashed = false,
+      width: 1 | 2 = 1,
+    ) => {
+      price.createPriceLine({
+        price: linePrice,
         color,
-        lineWidth: 1,
+        lineWidth: width,
         lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
         axisLabelVisible: true,
         title,
@@ -145,13 +148,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
     };
 
     const l = data.levels;
-    addLine(l.entry, VERCEL.entry, "entry");
-    addLine(l.stop, VERCEL.stop, "stop", true);
-    addLine(l.breakout_60d, VERCEL.breakout, "60d high", true);
-    addLine(l.target_2x, VERCEL.target2, "2×");
+    // SL below, TP above — the markers the user trades against.
+    addLine(l.entry, VERCEL.entry, "entry", false, 1);
+    addLine(l.stop, VERCEL.sl, "SL", true, 2);
+    addLine(l.target_2x, VERCEL.tp1, "TP", false, 2);
     if (logScale) {
-      addLine(l.target_5x, VERCEL.target5, "5×");
-      addLine(l.target_10x, VERCEL.target10, "10×");
+      addLine(l.target_5x, VERCEL.tp2, "TP 5×");
+      addLine(l.target_10x, VERCEL.tp3, "TP 10×");
     }
 
     chart.timeScale().fitContent();
@@ -170,13 +173,16 @@ export function PriceChart({ symbol }: { symbol: string }) {
     };
   }, [data, logScale]);
 
+  const entry = data?.levels.entry ?? 0;
+  const pct = (v: number) => (entry > 0 ? ((v / entry - 1) * 100) : 0);
+
   return (
     <div className="rounded-md ring-border bg-[var(--surface)] overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-3.5 h-3.5 text-[var(--muted)]" />
           <span className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
-            price · entry + projected targets
+            price · TP / SL levels
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -204,7 +210,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
                 ? "bg-[var(--accent)]/15 border-[var(--accent)]/40 text-[var(--accent)]"
                 : "border-[var(--border)] text-[var(--muted)] hover:text-white",
             )}
-            title="toggle log scale to see 5× / 10× targets"
+            title="toggle log scale to see the 5× / 10× take-profit targets"
           >
             log
           </button>
@@ -233,14 +239,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
       {data && !loading && !error && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2.5 border-t border-[var(--border)] bg-[var(--surface-2)] text-[10px] mono">
           <Level label="entry" value={data.levels.entry} color={VERCEL.entry} />
-          <Level label="stop" value={data.levels.stop} color={VERCEL.stop} />
-          <Level label="60d high" value={data.levels.breakout_60d} color={VERCEL.breakout} />
-          <Level label="2×" value={data.levels.target_2x} color={VERCEL.target2} />
-          <Level label="5×" value={data.levels.target_5x} color={VERCEL.target5} />
-          <Level label="10×" value={data.levels.target_10x} color={VERCEL.target10} />
+          <Level label="SL" value={data.levels.stop} color={VERCEL.sl} pct={pct(data.levels.stop)} />
+          <Level label="TP" value={data.levels.target_2x} color={VERCEL.tp1} pct={pct(data.levels.target_2x)} />
+          <Level label="TP 5×" value={data.levels.target_5x} color={VERCEL.tp2} pct={pct(data.levels.target_5x)} />
+          <Level label="TP 10×" value={data.levels.target_10x} color={VERCEL.tp3} pct={pct(data.levels.target_10x)} />
           {!logScale && (
             <span className="text-[var(--muted)] ml-auto">
-              toggle <span className="text-white">log</span> to see 5× / 10× on chart
+              toggle <span className="text-white">log</span> to plot 5× / 10× TP
             </span>
           )}
         </div>
@@ -249,12 +254,31 @@ export function PriceChart({ symbol }: { symbol: string }) {
   );
 }
 
-function Level({ label, value, color }: { label: string; value: number; color: string }) {
+function Level({
+  label,
+  value,
+  color,
+  pct,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  pct?: number;
+}) {
   return (
     <span className="flex items-center gap-1.5">
       <span className="w-2 h-2 rounded-sm" style={{ background: color }} />
       <span className="text-[var(--muted)]">{label}</span>
       <span className="tabular-nums">${value.toFixed(2)}</span>
+      {pct !== undefined && (
+        <span
+          className="tabular-nums"
+          style={{ color: pct >= 0 ? VERCEL.tp1 : VERCEL.sl }}
+        >
+          {pct >= 0 ? "+" : ""}
+          {pct.toFixed(0)}%
+        </span>
+      )}
     </span>
   );
 }
