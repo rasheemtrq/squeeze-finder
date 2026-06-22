@@ -616,6 +616,68 @@ def bot_run_cmd(
     console.print_json(json.dumps(res, default=str))
 
 
+@app.command("graph-build")
+def graph_build_cmd(
+    seed_snapshots: bool = typer.Option(
+        False, "--seed-snapshots", help="also seed from accrual snapshots (slower; needs aged data)"
+    ),
+) -> None:
+    """Build the trade knowledge graph from logged trades → data/graph.json."""
+    from src.config import DATA_DIR
+    from src.graph.build import build
+    from src.graph.insights import summary
+
+    with console.status("building trade knowledge graph..."):
+        g, counts = build(seed_snapshots=seed_snapshots)
+        path = DATA_DIR / "graph.json"
+        g.save(path)
+    s = summary(g)
+    console.print(
+        f"[bold]knowledge graph[/bold] trades={s['n_trades']} "
+        f"(bot={counts['bot_trades']}, snapshots={counts['snapshot_trades']}) · "
+        f"nodes={s['n_nodes']} · edges={s['n_edges']}  →  {path}"
+    )
+    if s["n_trades"] == 0:
+        console.print("[yellow]no completed trades yet — the graph fills in as the paper bot logs open+close trades.[/yellow]")
+    elif s["underpowered"]:
+        console.print(
+            f"[yellow]underpowered: {s['n_trades']} trades — signal stats are noisy until "
+            f"~{s['min_trades'] * 3}+; bot feedback stays gated/neutral.[/yellow]"
+        )
+
+
+@app.command("graph-insights")
+def graph_insights_cmd(min_trades: int = 8) -> None:
+    """What the graph has learned: signals + combos by realized expectancy (gated)."""
+    from src.graph.build import build
+    from src.graph.insights import rank_combos, rank_signals, summary
+
+    g, _ = build()
+    s = summary(g, min_trades=min_trades)
+    console.print(
+        f"[bold]graph insights[/bold] trades={s['n_trades']} · "
+        f"actionable signals (≥{min_trades} trades)={s['signals_actionable']}"
+    )
+    if s["signals_actionable"] == 0:
+        console.print("[yellow]nothing actionable yet — need more trades per signal; bot feedback is neutral until then.[/yellow]")
+        return
+    sig = rank_signals(g, min_trades=min_trades)
+    t = Table(title="signals by realized expectancy (R)")
+    for c in ["signal", "n", "win rate", "avg R"]:
+        t.add_column(c, justify="left" if c == "signal" else "right")
+    for r in sig["best"]:
+        t.add_row(r["signal"], str(r["n"]), f"{r['win_rate']:.0%}", f"{r['avg_r']:+.2f}")
+    console.print(t)
+    combos = rank_combos(g, min_trades=min_trades)
+    if combos:
+        ct = Table(title="best signal combinations")
+        for c in ["combo", "n", "win rate", "avg R"]:
+            ct.add_column(c, justify="left" if c == "combo" else "right")
+        for r in combos:
+            ct.add_row(" + ".join(r["combo"]), str(r["n"]), f"{r['win_rate']:.0%}", f"{r['avg_r']:+.2f}")
+        console.print(ct)
+
+
 @app.command()
 def serve(port: int = 8000, reload: bool = True) -> None:
     """Start FastAPI server."""

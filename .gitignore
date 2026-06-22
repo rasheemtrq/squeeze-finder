@@ -29,3 +29,5 @@ data/ideas.jsonl
 .vscode/
 .idea/
 *.swp
+data/bot_trades.jsonl
+data/graph.json

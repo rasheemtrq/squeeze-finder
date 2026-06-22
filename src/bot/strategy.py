@@ -111,19 +111,37 @@ def build_plans(
     equity: float,
     params: dict[str, Any],
     skip_tickers: set[str] | None = None,
+    graph: Any = None,
 ) -> list[dict[str, Any]]:
-    """Plans for every setup at/above the score floor, skipping names already held."""
+    """Plans for every setup at/above the score floor, skipping names already held.
+
+    When a knowledge `graph` is supplied, each setup's score is nudged by the
+    graph's learned signal expectancy (gated — neutral until signals have enough
+    trades) and the list is re-ranked by the adjusted score, so the bot leans
+    toward signal patterns that have actually worked.
+    """
+    from src.graph.feedback import learned_multiplier
+
     skip = skip_tickers or set()
-    plans: list[dict[str, Any]] = []
+    ranked: list[tuple[float, float, dict]] = []
     for s in setups:
         t = s.get("ticker")
         if not t or t in skip:
             continue
-        if (s.get("score") or 0) < params["min_setup_score"]:
+        base = s.get("score") or 0
+        mult = learned_multiplier(graph, s.get("flags"))
+        adj = base * mult
+        if adj < params["min_setup_score"]:
             continue
+        ranked.append((adj, mult, s))
+
+    ranked.sort(key=lambda x: x[0], reverse=True)
+
+    plans: list[dict[str, Any]] = []
+    for adj, mult, s in ranked:
         try:
             p = plan_for_ticker(
-                t, equity, params,
+                s["ticker"], equity, params,
                 score=s.get("score"),
                 pressure=(s.get("pressure_score") or {}).get("score"),
                 flags=s.get("flags"),
@@ -131,5 +149,7 @@ def build_plans(
         except Exception:
             p = None
         if p:
+            p["learned_multiplier"] = round(mult, 3)
+            p["adj_score"] = round(adj, 1)
             plans.append(p)
     return plans

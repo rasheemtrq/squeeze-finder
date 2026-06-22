@@ -73,12 +73,20 @@ def build_daily_plan(
     equity = equity if equity is not None else params["default_equity"]
     result = scan(limit=limit, sort_by="composite")
     setups = result.get("results") or []
-    plans = strategy.build_plans(setups, equity, params, skip_tickers=skip_tickers)
+
+    # Learned feedback: rebuild the trade knowledge graph and let it nudge the
+    # ranking. Gated — neutral until signals have enough trades, so this is a
+    # no-op early on and gradually biases toward what's actually worked.
+    from src.graph.build import build as build_graph
+
+    graph, _ = build_graph()
+    plans = strategy.build_plans(setups, equity, params, skip_tickers=skip_tickers, graph=graph)
     kept, dropped, deployed = apply_risk_caps(plans, equity, params, open_count)
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "equity": equity,
         "scanned": len(setups),
+        "graph_trades": graph.n_trades,
         "candidates": len(plans),
         "selected": kept,
         "dropped": dropped,
