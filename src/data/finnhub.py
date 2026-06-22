@@ -155,14 +155,26 @@ def enrich_ticker(result: dict) -> dict:
 
 
 def is_valid_ticker(ticker: str) -> bool:
-    """Fast check using Finnhub quote. Returns False quickly for delisted/invalid symbols."""
+    """Soft validity check via Finnhub quote.
+
+    Only returns False when Finnhub *definitively* reports the symbol invalid —
+    a quote whose current_price is 0 (Finnhub's delisted/unknown sentinel). On
+    ANY uncertainty (Finnhub disabled, rate-limited, network error, or an empty
+    response) it returns True, so a transient Finnhub hiccup never 404s a valid
+    ticker. yfinance scoring downstream is the real source of truth.
+    """
     if not _enabled():
         return True  # can't check, assume ok
     try:
         q = fetch_quote(ticker)
-        return bool(q and q.get("current_price"))
     except Exception:
-        return False
+        return True  # rate-limit / network error → can't determine, don't block
+    if not q:
+        return True  # empty response → don't block
+    price = q.get("current_price")
+    # current_price == 0 is Finnhub's signal for a delisted/invalid symbol;
+    # missing/None means we couldn't read it, so don't block on that either.
+    return price is None or price > 0
 
 
 def enrich_top_results(results: list[dict], top_n: int = 8) -> list[dict]:
