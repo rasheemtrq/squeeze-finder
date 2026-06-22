@@ -1,0 +1,11 @@
+[Unit]
+Description=warm squeeze-finder scan caches during market hours
+
+[Timer]
+# Every 30 min, 13:00-21:30 UTC (~9:00a-5:30p ET), Mon-Fri. Off-hours the
+# caches serve stale-but-instant (24h max age), so no overnight warming needed.
+OnCalendar=Mon-Fri 13..21:00/30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

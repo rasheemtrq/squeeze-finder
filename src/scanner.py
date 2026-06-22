@@ -41,10 +41,13 @@ from src.score.composite import collect_flags, composite, is_red_flag
 from src.score.factors import compute_all
 from src.score.pressure import compute as compute_pressure
 
-SCAN_CACHE_FRESH_TTL = 600   # 10 min — under this age, served as fresh, no refresh
-SCAN_CACHE_MAX_AGE = 3600    # 1 hour — beyond this, treat as missing and full-refetch
+SCAN_CACHE_FRESH_TTL = 1800   # 30 min — under this age, served as fresh, no refresh
+SCAN_CACHE_MAX_AGE = 86400    # 24 h — serve cached (stale + bg-refresh) up to a day
+UNIVERSE_CACHE_TTL = 2700     # 45 min — stabilize the dynamic universe so the warm
+#                               job and the frontend hash to the SAME scan cache key
 # Stale-while-revalidate: between FRESH_TTL and MAX_AGE, serve cached value
-# instantly AND fire a background refresh. User never waits for a cold scan.
+# instantly AND fire a background refresh. With the warm cron the cache stays
+# fresh during market hours; off-hours it serves stale instantly up to a day.
 
 # In-flight refresh dedupe so simultaneous stale hits don't fire N parallel
 # scans against the same cache key.
@@ -192,7 +195,13 @@ def scan(
         universe = tickers
         universe_sources: dict[str, list[str]] = {"override": list(tickers)}
     elif dynamic_universe:
-        built = universe_builder.build(DEFAULT_UNIVERSE)
+        # Cache the built universe so every scan in the window uses the identical
+        # ticker list → stable cache key → the warm job's cache actually serves
+        # the next frontend request (the universe would otherwise drift per call).
+        built = _cache.get("universe", "dynamic", UNIVERSE_CACHE_TTL)
+        if not built:
+            built = universe_builder.build(DEFAULT_UNIVERSE)
+            _cache.put("universe", "dynamic", built)
         universe = built["tickers"]
         universe_sources = built["sources"]
     else:

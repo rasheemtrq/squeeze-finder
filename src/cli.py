@@ -678,6 +678,24 @@ def graph_insights_cmd(min_trades: int = 8) -> None:
         console.print(ct)
 
 
+@app.command("warm")
+def warm_cmd() -> None:
+    """Pre-warm the scan caches so the web UI loads instantly. Wire to a cron.
+
+    Warms the EXACT cache keys the frontend requests: the composite scan
+    (limit=25, sort_by=composite) and the swing scan (limit=25). The dynamic
+    universe is cached, so these keys stay stable between warms and the next
+    page load is served from cache.
+    """
+    with console.status("warming scan caches..."):
+        sq = scan(limit=25, sort_by="composite", force_refresh=True)
+        sw = swing_scan(force_refresh=True, limit=25)
+    console.print(
+        f"[green]warmed[/green] scan({sq['scored']} scored) · "
+        f"swing({sw['scored']} scored) @ {sq['as_of'][:19]}"
+    )
+
+
 @app.command()
 def serve(port: int = 8000, reload: bool = True) -> None:
     """Start FastAPI server."""

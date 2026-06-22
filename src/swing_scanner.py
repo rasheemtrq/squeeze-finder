@@ -53,8 +53,8 @@ from src.score.swing_factors import (
     compute_swing,
 )
 
-SCAN_CACHE_FRESH_TTL = 600
-SCAN_CACHE_MAX_AGE = 3600
+SCAN_CACHE_FRESH_TTL = 1800   # 30 min fresh
+SCAN_CACHE_MAX_AGE = 86400    # 24 h serve-stale (warm cron keeps it fresh in-hours)
 
 _in_flight_refreshes: set[str] = set()
 _in_flight_lock = threading.Lock()

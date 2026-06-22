@@ -1,0 +1,21 @@
+[Unit]
+Description=squeeze-finder scan cache warmer
+Documentation=https://github.com/rasheemtrq/squeeze-finder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=squeeze
+Group=squeeze
+WorkingDirectory=/opt/squeeze-finder
+EnvironmentFile=/opt/squeeze-finder/.env
+ExecStart=/opt/squeeze-finder/.venv/bin/python -m src.cli warm
+TimeoutStartSec=300
+
+# Mirror the API service sandbox so cache writes under data/ succeed.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/squeeze-finder/data
