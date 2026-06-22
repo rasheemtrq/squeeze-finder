@@ -39,7 +39,7 @@ export function ZeroDteNarrativeCard({ ticker }: { ticker: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
         <div className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
-          tactical 0dte read · claude haiku
+          tactical 0dte read
         </div>
         {data?.cached && (
           <span className="text-[10px] mono text-[var(--muted)]">cached</span>

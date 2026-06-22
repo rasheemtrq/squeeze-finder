@@ -27,11 +27,15 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 # Override with OPENROUTER_MODELS=comma,separated,ids — e.g. set it back to
 # "anthropic/claude-haiku-4.5" to use the paid model. Free models still require
 # an OPENROUTER_API_KEY (a free OpenRouter account).
-# Sole model for all agentic LLM calls (user-chosen). nex-n2-pro is newer and
-# frequently HTTP 429s on the free tier; with no fallback, narrative/quicktake
-# calls raise OpenRouterError during those windows — surfaced loudly, never
-# faked. To add resilience, set OPENROUTER_MODELS=nex-agi/nex-n2-pro:free,<backup>.
-_DEFAULT_OPENROUTER_MODELS = "nex-agi/nex-n2-pro:free"
+# Free model chain for all agentic LLM calls — empirically confirmed to return
+# valid JSON on the free tier (probed 2026-06). Quality-first: nemotron-120b
+# leads, gpt-oss-20b (different provider) catches its rare misses. nex-n2-pro
+# was dropped — it 429s constantly on the free tier. Override via OPENROUTER_MODELS
+# (e.g. anthropic/claude-haiku-4.5 for the paid model). Needs an OPENROUTER_API_KEY.
+_DEFAULT_OPENROUTER_MODELS = (
+    "nvidia/nemotron-3-super-120b-a12b:free,"
+    "openai/gpt-oss-20b:free"
+)
 OPENROUTER_MODELS = [
     m.strip()
     for m in os.getenv("OPENROUTER_MODELS", _DEFAULT_OPENROUTER_MODELS).split(",")
