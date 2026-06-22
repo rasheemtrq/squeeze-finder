@@ -31,7 +31,7 @@ from src.analyst.openrouter import (
     generate_quicktake,
     generate_zero_dte_narrative,
 )
-from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
+from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS, CACHE_DIR, FINNHUB_API_KEY
 from src.data import _cache, prices
 from src.data.prices import DataUnavailable
 from src.options.recommender import recommend as recommend_options
@@ -63,6 +63,23 @@ async def lifespan(_app: FastAPI):
     if os.getenv("SQUEEZE_PREWARM", "1") != "0":
         logger.info("kicking off background prewarm scan...")
         threading.Thread(target=_prewarm_scan, daemon=True, name="prewarm").start()
+
+    # Background periodic refresher for FTD (best free settlement signal) + clinical catalysts
+    def _start_periodic_refresh():
+        import time
+        def _refresher():
+            while True:
+                try:
+                    from src.data import ftd as ftd_mod
+                    ftd_mod.refresh()
+                    logger.info("Periodic FTD + catalyst refresh completed (catalysts will refresh on next access)")
+                except Exception as e:
+                    logger.debug("Periodic refresh skipped: %s", e)
+                time.sleep(6 * 3600)  # every 6 hours
+        t = threading.Thread(target=_refresher, daemon=True, name="ftd-clinical-refresher")
+        t.start()
+
+    _start_periodic_refresh()
     yield
 
 
@@ -89,6 +106,8 @@ def health() -> dict:
 def scan_endpoint(
     limit: int = Query(20, ge=1, le=100),
     min_score: float = Query(0, ge=0, le=100),
+    min_pressure: float = Query(0, ge=0, le=100),
+    sort_by: str = Query("composite", description="composite (default, discovery) or pressure (imminent best setups)"),
     tickers: str | None = Query(None, description="comma-separated override of default universe"),
     w_sentiment: float = Query(DEFAULT_WEIGHTS["sentiment"], ge=0, le=1),
     w_options: float = Query(DEFAULT_WEIGHTS["options"], ge=0, le=1),
@@ -111,12 +130,30 @@ def scan_endpoint(
     if tickers:
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
 
-    return scan(tickers=universe, weights=weights, min_score=min_score, limit=limit)
+    return scan(
+        tickers=universe,
+        weights=weights,
+        min_score=min_score,
+        min_pressure=min_pressure,
+        limit=limit,
+        sort_by=sort_by,
+    )
 
 
 @app.get("/api/ticker/{symbol}")
 def ticker_endpoint(symbol: str) -> dict:
     symbol = symbol.upper()
+    # Fast fail for clearly bad/delisted tickers when we have Finnhub
+    if FINNHUB_API_KEY:
+        try:
+            from src.data.finnhub import is_valid_ticker
+            if not is_valid_ticker(symbol):
+                raise HTTPException(status_code=404, detail=f"ticker not found or delisted: {symbol}")
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # don't block on check failure
+
     try:
         result = score_ticker(symbol)
     except Exception as e:

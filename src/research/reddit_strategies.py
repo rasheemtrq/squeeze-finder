@@ -27,7 +27,7 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.analyst.openrouter import MODELS, OpenRouterError, _extract_json
+from src.analyst.openrouter import MODELS, OpenRouterError, _content, _extract_json
 from src.analyst.openrouter import URL as OPENROUTER_URL
 from src.config import OPENROUTER_API_KEY
 
@@ -242,8 +242,7 @@ def synthesize_with_haiku(harvest_data: dict, timeout: float = 90) -> dict:
                 timeout=timeout,
             )
             r.raise_for_status()
-            content = r.json()["choices"][0]["message"]["content"]
-            parsed = _extract_json(content)
+            parsed = _extract_json(_content(r.json()))
             if isinstance(parsed, dict):
                 return {**parsed, "model_used": model}
             last_error = f"{model}: invalid response shape"

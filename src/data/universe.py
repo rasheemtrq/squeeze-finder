@@ -11,10 +11,14 @@ from __future__ import annotations
 
 from src.data import apewisdom, trending
 from src.data.prices import DataUnavailable
+from src.data.finnhub import is_valid_ticker, fetch_quote
 
-MAX_UNIVERSE = 120
-WSB_TOP_N = 50
-TRENDING_TOP_N = 30
+MAX_UNIVERSE = 80
+# Keep dynamic universe small for "right signals" quality.
+# Large WSB/trending lists bring in too much noise and dead tickers.
+# We now heavily gate dynamic names with Finnhub validity + liquidity.
+WSB_TOP_N = 20
+TRENDING_TOP_N = 12
 
 # Tickers we never want to scan (ETFs that aren't squeeze candidates, indexes,
 # common false-positive symbols from trending feeds).
@@ -52,6 +56,16 @@ def build(core: list[str]) -> dict:
             return
         if len(final) >= MAX_UNIVERSE:
             return
+
+        # Strong gate for dynamic sources: require Finnhub to see a real, liquid ticker
+        if src in ("wsb", "trending"):
+            if not is_valid_ticker(t):
+                return
+            q = fetch_quote(t) or {}
+            # Require at least some meaningful recent volume/price
+            if not q.get("current_price") or (q.get("current_price", 0) < 0.50):
+                return
+
         seen.add(t)
         final.append(t)
         sources[src].append(t)

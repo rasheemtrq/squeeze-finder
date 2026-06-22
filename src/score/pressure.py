@@ -43,6 +43,7 @@ def lending_pressure(
     finra: dict | None,
     iborrowdesk: dict | None = None,
     regsho: dict | None = None,
+    ftd: dict | None = None,
 ) -> float:
     if not fund:
         return 0.0
@@ -58,6 +59,18 @@ def lending_pressure(
     sector_p75 = si_pct_reference_p75(sector)
     L_level = si_pct / sector_p75 if sector_p75 > 0 else 0
     L_dtc = math.sqrt(dtc / 5) if dtc > 0 else 0.5  # √(DTC/5)
+
+    # Institutional lock-up congestion (P0 refinement): high % held by insts on
+    # a low-float name makes shares even harder to locate for covering shorts.
+    # Amplifies L when combined with real SI signal. Complements the SI-factor
+    # congestion_mult; here it directly lifts the pressure (imminent) score.
+    float_shares = fund.get("float_shares") or 0
+    held_inst = fund.get("held_percent_institutions") or 0
+    if held_inst >= 0.55 and float_shares > 0 and float_shares < 150_000_000 and si_pct >= 0.12:
+        if held_inst >= 0.65:
+            L_level *= 1.25
+        else:
+            L_level *= 1.12
 
     # Borrow signal: prefer iBorrowDesk live data, fall back to FINRA accel.
     L_borrow = 1.0
@@ -101,6 +114,24 @@ def lending_pressure(
         days = regsho.get("consecutive_days") or 1
         boost = 1.3 + min(0.7, max(0, days - 5) * 0.05)  # 5d→1.3, 10d→1.55, 20d→2.0
         L *= boost
+
+    # SEC Fails-to-Deliver (new best free source) — direct measure of
+    # settlement fails. Rising or large FTDs relative to float/volume is one
+    # of the strongest free proxies for naked short / hard-to-borrow pressure.
+    if ftd and ftd.get("latest_ftd"):
+        latest = ftd["latest_ftd"]
+        avg = ftd.get("avg_ftd_recent", latest) or latest
+        float_shares = (fund or {}).get("float_shares") or 0
+
+        if float_shares > 0 and latest > 0:
+            ftd_ratio = latest / float_shares
+            # 0.5%+ of float failing = meaningful pressure
+            if ftd_ratio > 0.005:
+                ftd_boost = 1.0 + min(0.8, (ftd_ratio - 0.005) * 40)
+                L *= ftd_boost
+            # Also reward velocity (FTDs rising sharply)
+            if avg > 0 and latest > avg * 1.5:
+                L *= 1.15
 
     return L
 
@@ -234,6 +265,7 @@ def compute(bundle: dict) -> dict:
         bundle.get("finra"),
         bundle.get("iborrowdesk"),
         bundle.get("regsho"),
+        bundle.get("ftd"),          # SEC FTD data — best free naked/short pressure signal
     )
     G = gamma_pressure(bundle.get("options"), bundle.get("fundamentals"))
     S = social_pressure(bundle.get("stocktwits"), bundle.get("apewisdom"))

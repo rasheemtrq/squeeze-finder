@@ -17,7 +17,8 @@ export default function Home() {
       </div>
 
       <Suspense fallback={<TableSkeleton rows={12} />}>
-        <ScanTable limit={25} />
+        {/* Default to pressure sort for higher-quality "right signals" experience */}
+        <ScanTable limit={25} sort_by="pressure" />
       </Suspense>
     </div>
   );

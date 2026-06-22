@@ -22,7 +22,7 @@ Implemented in `src/score/pressure.py`. Research-backed by Allen, Haas, Nowak, P
 pressure = (L_norm · G_norm · S_norm) ** (1/3)      # geometric mean, 0–100
 ```
 Where:
-- **L** = SI%Float / 0.20  ·  √(DTC/5)  ·  (FINRA short-vol recent / older)
+- **L** = (SI%Float / sector_p75) · √(DTC/5) · (FINRA short-vol recent/older) · [institutional_lockup 1.12-1.25x if heldInst≥55% + float<150M]
 - **G** = Σ γ(S,K,τ,σ) · OI · 100 · S²  /  (S · float_shares)   for calls with K ∈ [S, 1.15·S], τ ∈ [3, 21]d, OI ≥ 50
 - **S** = WSB rank+velocity component  ⊗  StockTwits engagement·polarity component
 
@@ -81,6 +81,7 @@ si      = clip(50*min(si_pct/0.30, 1) + 50*min(dtc/10, 1), 0, 100)
 - `si_pct ≥ 20%` is the entry bar per user thesis
 - `dtc ≥ 5` amplifies; `dtc ≥ 10` max
 - FINRA data is bi-monthly — note report date in output and penalize if data >20 days old
+- **P0 refinement (2026-06)**: institutional_lockup congestion_mult (1.08-1.30x) and pressure L boost when held%inst ≥50-65% + float <100-300M on names with real SI signal. Captures "hard-to-borrow lock-up" from Reddit corpus (high inst ownership + low float = least supply for shorts to cover). Uses yf.heldPercentInstitutions (previously dropped in fetch). Flags as `institutional_lockup` (promoted over generic flags).
 
 ### 4. Technicals (15%)
 Inputs: OHLCV (yfinance), pandas-ta.
@@ -94,14 +95,15 @@ ta = clip(40*breakout + 30*min(rvol/3, 1) + 30*((rsi14-50)/20 if rsi14<80 else 0
 - Breakout on `rvol < 1.5` is suspect — halve score
 
 ### 5. Catalyst (10%)
-Inputs: Finnhub earnings calendar, openFDA PDUFA/advisory dates, SEC 8-K frequency.
+Inputs: Finnhub earnings + ClinicalTrials.gov (free) for clinical readouts/PDUFA proxies + dilution/8-K signals.
+The fetcher now combines earnings with upcoming clinical events (primary completion, data readouts) from ClinicalTrials.gov — a major free upgrade for biotech-heavy squeeze names.
 ```
-days_to_event = min(earnings_days, fda_days, scheduled_event_days)
+days_to_event = min(earnings_days, clinical_dte, ...)
 catalyst = clip(100 * max(0, 1 - days_to_event/30), 0, 100)
 ```
+- Binary events (FDA/clinical readout) get strong scoring.
 - Event within 7 days → 75+
 - No event within 30 days → 0
-- Add +10 bonus if last 8-K was material (M&A, clinical data)
 
 ## Red flags (auto-demote or exclude)
 - Market cap <$50M AND avg daily $volume <$5M → exclude (no liquidity to squeeze)
@@ -125,8 +127,11 @@ Include `data_as_of` timestamps per factor since freshness varies.
 
 ## Invocation
 ```bash
-uv run python -m src.cli scan                    # default weights, top 20
+uv run python -m src.cli scan                    # composite (discovery), top 20
+uv run python -m src.cli scan --sort-by pressure # best imminent setups (pressure-ranked)
 uv run python -m src.cli scan --min-score 70
+uv run python -m src.cli scan --min-pressure 50 --sort-by pressure
 uv run python -m src.cli scan --weights 0.4,0.2,0.2,0.1,0.1
 uv run python -m src.cli score AMC               # single ticker
 ```
+API: `/api/scan?sort_by=pressure&min_pressure=40` (returns pre-sorted results). Use pressure sort + the geometric L·G·S model when the goal is the highest-conviction short-squeeze *setups* (all three pressures firing) rather than broad high-composite names.

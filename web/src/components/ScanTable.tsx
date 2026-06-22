@@ -1,10 +1,16 @@
 import { fetchScan } from "@/lib/api";
 import { ScanRow } from "./ScanRow";
 
-export async function ScanTable({ limit = 20 }: { limit?: number }) {
+export async function ScanTable({
+  limit = 20,
+  sort_by = "composite",
+}: {
+  limit?: number;
+  sort_by?: "composite" | "pressure";
+}) {
   let data;
   try {
-    data = await fetchScan({ limit });
+    data = await fetchScan({ limit, sort_by });
   } catch (e) {
     return (
       <div className="rounded-md border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-4 text-sm">

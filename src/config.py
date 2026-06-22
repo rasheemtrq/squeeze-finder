@@ -19,7 +19,26 @@ for d in (CACHE_DIR, DEEPDIVE_DIR, SCREEN_DIR):
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+# Analyst-narrative models (OpenRouter), tried in order — first valid JSON wins.
+# Defaults to FREE models that support JSON-mode output. Fallback ordering
+# matters more here than with a paid model: free endpoints rate-limit and go
+# offline, so a diverse chain (different providers) keeps narratives working.
+# Override with OPENROUTER_MODELS=comma,separated,ids — e.g. set it back to
+# "anthropic/claude-haiku-4.5" to use the paid model. Free models still require
+# an OPENROUTER_API_KEY (a free OpenRouter account).
+# Sole model for all agentic LLM calls (user-chosen). nex-n2-pro is newer and
+# frequently HTTP 429s on the free tier; with no fallback, narrative/quicktake
+# calls raise OpenRouterError during those windows — surfaced loudly, never
+# faked. To add resilience, set OPENROUTER_MODELS=nex-agi/nex-n2-pro:free,<backup>.
+_DEFAULT_OPENROUTER_MODELS = "nex-agi/nex-n2-pro:free"
+OPENROUTER_MODELS = [
+    m.strip()
+    for m in os.getenv("OPENROUTER_MODELS", _DEFAULT_OPENROUTER_MODELS).split(",")
+    if m.strip()
+]
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "squeeze-finder local")
+ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "")
 
 CACHE_TTL = {
     "prices_intraday": 300,
@@ -49,14 +68,17 @@ DEFAULT_WEIGHTS = {
 }
 
 DEFAULT_UNIVERSE = [
-    "GME", "AMC", "BBAI", "SOFI", "PLTR", "HOOD", "RIVN", "LCID", "NKLA",
-    "MARA", "RIOT", "CLSK", "HUT", "BTBT",
-    "CVNA", "WOLF", "UPST", "OPEN", "SKLZ", "FUBO",
-    "SPCE", "RKLB", "ASTS", "JOBY", "ACHR",
-    "IONQ", "QBTS", "RGTI", "QUBT",
-    "TLRY", "CGC", "ACB", "SNDL",
-    "BYND", "PTON", "WKHS", "BLNK", "CHPT",
+    "GME", "AMC", "BBAI", "SOFI", "PLTR", "HOOD",
+    "MARA", "RIOT", "CLSK",
+    "CVNA", "WOLF", "UPST",
+    "RKLB", "ASTS",
+    "IONQ",
     "MSTR", "COIN",
-    "PRPL", "ARCT", "GNUS",
-    "BILL", "AI", "SMCI", "IREN",
+    "ARCT",
+    "SMCI", "IREN",
 ]
+
+# Concurrency for fetching the ~10-12 data sources *inside* one ticker.
+# Small value to avoid hammering yfinance (the main throttle) while still
+# overlapping I/O for StockTwits, EDGAR, Finnhub, etc.
+INNER_FETCH_CONCURRENCY = 5

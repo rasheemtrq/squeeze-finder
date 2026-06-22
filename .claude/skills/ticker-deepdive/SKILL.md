@@ -1,6 +1,6 @@
 ---
 name: ticker-deepdive
-description: Structured analyst writeup for a single squeeze candidate. Load when the user asks to analyze, deep-dive, research, or write up a specific ticker. Offloads narrative prose to Claude Haiku 4.5 via OpenRouter (paid, ~$0.004/call, 30-min cached) while Claude (this agent) handles the structured reasoning, data stitching, and invalidation logic.
+description: Structured analyst writeup for a single squeeze candidate. Load when the user asks to analyze, deep-dive, research, or write up a specific ticker. Offloads narrative prose to a configurable OpenRouter model chain (free JSON-capable models by default; set OPENROUTER_MODELS to override, 30-min cached) while Claude (this agent) handles the structured reasoning, data stitching, and invalidation logic.
 ---
 
 # Ticker Deepdive — analyst writeup
@@ -18,18 +18,19 @@ User says: "deep dive on TICKER", "analyze TICKER", "write up TICKER", "what's t
 | 5. Review narrative for factual drift | Claude | Cheap models hallucinate — verify against facts block |
 | 6. Format final writeup | Claude | Keeps output discipline |
 
-**OpenRouter model — paid, single source of truth:**
-- `anthropic/claude-haiku-4.5` — primary
-- `anthropic/claude-haiku-4-5` — same model, dash variant in case OR routing ever requires it
+**OpenRouter model chain — configurable, free by default:**
+- Source of truth: `config.OPENROUTER_MODELS` (env `OPENROUTER_MODELS`, comma-separated, tried in order).
+- Default: `nex-agi/nex-n2-pro:free` as the **sole** model (user-chosen). It supports JSON-mode output but 429s frequently on the free tier — with no fallback, calls raise `OpenRouterError` during those windows. Add resilience via `OPENROUTER_MODELS=nex-agi/nex-n2-pro:free,nvidia/nemotron-3-super-120b-a12b:free`.
+- To upgrade quality, set `OPENROUTER_MODELS=anthropic/claude-haiku-4.5` (paid, ~$0.004/call).
 
-Approximate cost: $0.004 per narrative (≈600 in / 600 out). Cached 30 min in `_cache` to avoid repeats.
+Free-tier caveats: lower quality than paid, daily request caps, and occasional latency/outages — the multi-model fallback chain absorbs most of this. Results cached 30 min in `_cache` to limit repeats and rate-limit pressure. Step 5 (verify narrative against the facts block) matters MORE with free models — they hallucinate more.
 
 Client wrapper: `src/analyst/openrouter.py::generate_narrative`. Call signature:
 ```python
 narrative = generate_narrative(facts_block(ticker_result))
 # returns {tldr: str, bull: [str,...], bear: [str,...], model_used: str}
 ```
-The wrapper enforces JSON-mode response and validates shape. If Haiku is unreachable or billing fails, the call raises `OpenRouterError` and the endpoint returns 502 — we surface the failure rather than silently falling back to a weaker model.
+The wrapper enforces JSON-mode response and validates shape. If every model in the chain fails or returns invalid JSON, the call raises `OpenRouterError` and the endpoint returns 502 — we surface the failure rather than fabricate a narrative.
 
 ## Output template (exact structure)
 ```markdown

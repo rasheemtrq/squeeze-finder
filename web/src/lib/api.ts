@@ -151,11 +151,15 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export function fetchScan(params?: {
   limit?: number;
   min_score?: number;
+  min_pressure?: number;
+  sort_by?: "composite" | "pressure";
   tickers?: string;
 }): Promise<ScanResult> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.min_score) qs.set("min_score", String(params.min_score));
+  if (params?.min_pressure) qs.set("min_pressure", String(params.min_pressure));
+  if (params?.sort_by) qs.set("sort_by", params.sort_by);
   if (params?.tickers) qs.set("tickers", params.tickers);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return jsonFetch<ScanResult>(`/api/scan${suffix}`);

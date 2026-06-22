@@ -4,16 +4,24 @@ import concurrent.futures
 import hashlib
 import json
 import threading
+import time
 from datetime import UTC, datetime
 from typing import Any
 
-from src.config import DEFAULT_UNIVERSE, DEFAULT_WEIGHTS
+from src.config import (
+    ALPHAVANTAGE_API_KEY,
+    DEFAULT_UNIVERSE,
+    DEFAULT_WEIGHTS,
+    FINNHUB_API_KEY,
+    INNER_FETCH_CONCURRENCY,
+)
 from src.data import (
     _cache,
     apewisdom,
     catalysts,
     dilution,
     finra,
+    ftd,
     fundamentals,
     iborrowdesk,
     insiders,
@@ -45,9 +53,12 @@ _in_flight_lock = threading.Lock()
 
 
 def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
-    """Fetch all data sources for a ticker. Soft-fails per source.
-    Kept sequential per-ticker — yfinance throttles heavily on >30 concurrent calls.
-    Parallelism is at the outer scan level instead (more tickers at once).
+    """Fetch all data sources for a ticker in parallel (small inner pool).
+
+    Yfinance is still the main throttle risk, so we keep INNER_FETCH_CONCURRENCY
+    modest (default 5). This overlaps I/O for StockTwits, EDGAR, Finnhub, etc.
+    while the outer ThreadPoolExecutor (max_workers=16) handles ticker-level
+    parallelism.
     """
     bundle: dict[str, Any] = {"ticker": ticker, "errors": {}}
     sources = {
@@ -63,16 +74,27 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
         "inst_holders": lambda: inst_holders.fetch(ticker),
         "iborrowdesk": lambda: iborrowdesk.fetch(ticker),
         "regsho": lambda: regsho.fetch(ticker),
+        "ftd": lambda: ftd.fetch(ticker),   # SEC Fails-to-Deliver — powerful free signal
     }
-    for name, fn in sources.items():
-        try:
-            bundle[name] = fn()
-        except DataUnavailable as e:
-            bundle[name] = None
-            bundle["errors"][name] = str(e)
-        except Exception as e:
-            bundle[name] = None
-            bundle["errors"][name] = f"unexpected: {e}"
+
+    timings = {}
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=INNER_FETCH_CONCURRENCY
+    ) as pool:
+        future_to_name = {pool.submit(fn): name for name, fn in sources.items()}
+        for future in concurrent.futures.as_completed(future_to_name):
+            name = future_to_name[future]
+            t0 = time.time()
+            try:
+                bundle[name] = future.result()
+            except DataUnavailable as e:
+                bundle[name] = None
+                bundle["errors"][name] = str(e)
+            except Exception as e:
+                bundle[name] = None
+                bundle["errors"][name] = f"unexpected: {e}"
+            timings[name] = round((time.time() - t0) * 1000)
+    bundle["fetch_timings_ms"] = timings
     return bundle
 
 
@@ -132,6 +154,7 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         "exclude_reason": red_flag if excluded else None,
         "as_of": datetime.now(UTC).isoformat(),
         "errors": bundle.get("errors", {}),
+        "fetch_timings_ms": bundle.get("fetch_timings_ms", {}),
     }
 
 
@@ -159,9 +182,11 @@ def scan(
     weights: dict | None = None,
     max_workers: int = 16,
     min_score: float = 0,
+    min_pressure: float = 0,
     limit: int = 20,
     force_refresh: bool = False,
     dynamic_universe: bool = True,
+    sort_by: str = "composite",  # "composite" | "pressure"
 ) -> dict[str, Any]:
     if tickers:
         universe = tickers
@@ -177,7 +202,14 @@ def scan(
 
     cache_key = hashlib.sha1(
         json.dumps(
-            {"universe": universe, "weights": weights, "min_score": min_score, "limit": limit},
+            {
+                "universe": universe,
+                "weights": weights,
+                "min_score": min_score,
+                "min_pressure": min_pressure,
+                "limit": limit,
+                "sort_by": sort_by,
+            },
             sort_keys=True,
         ).encode()
     ).hexdigest()[:16]
@@ -200,8 +232,10 @@ def scan(
                         weights=weights,
                         max_workers=max_workers,
                         min_score=min_score,
+                        min_pressure=min_pressure,
                         limit=limit,
                         dynamic_universe=dynamic_universe,
+                        sort_by=sort_by,
                     )
                 return cached
 
@@ -242,8 +276,64 @@ def scan(
                 ps["score_pre_regime"] = ps["score"]
                 ps["score"] = round(ps["score"] * regime_mult, 1)
 
-    results.sort(key=lambda r: r["score"], reverse=True)
-    filtered = [r for r in results if r["score"] >= min_score][:limit]
+    # Sort by requested metric. "best short squeeze setups" (imminent) use
+    # sort_by="pressure" — the multiplicative L·G·S signal.
+    def _get_pressure(r: dict) -> float:
+        ps = r.get("pressure_score") or {}
+        return ps.get("score", 0.0) if isinstance(ps, dict) else 0.0
+
+    if sort_by in ("pressure", "pressure_score"):
+        results.sort(key=_get_pressure, reverse=True)
+        primary_filter_key = "pressure"
+        filter_threshold = min_pressure
+    else:
+        results.sort(key=lambda r: r.get("score", 0), reverse=True)
+        primary_filter_key = "composite"
+        filter_threshold = min_score
+
+    # Filter on the chosen primary metric (min_score always applies to composite
+    # for quality floor; min_pressure is additional when sorting by pressure).
+    if primary_filter_key == "pressure":
+        filtered = [
+            r
+            for r in results
+            if (r.get("score", 0) >= min_score)
+            and (_get_pressure(r) >= filter_threshold)
+        ][:limit]
+    else:
+        filtered = [r for r in results if r.get("score", 0) >= filter_threshold][:limit]
+
+    # Optional lightweight Alpha Vantage enrichment (only on top results, only if key present)
+    if ALPHAVANTAGE_API_KEY:
+        try:
+            from src.data.alphavantage import enrich_top_results
+            filtered = enrich_top_results(filtered, top_n=min(5, len(filtered)))
+        except Exception as e:
+            logger.debug("Alpha Vantage enrichment skipped: %s", e)
+
+    # Finnhub enrichment — excellent free tier (60/min). Strong option for
+    # reliable quotes + fundamentals. Run on more results than AV.
+    if FINNHUB_API_KEY:
+        try:
+            from src.data.finnhub import enrich_top_results as finnhub_enrich
+            filtered = finnhub_enrich(filtered, top_n=min(10, len(filtered)))
+        except Exception as e:
+            logger.debug("Finnhub enrichment skipped: %s", e)
+
+    # Quality gate for "right signals": when sorting by pressure, require
+    # meaningful pressure + some evidence of real short/settlement stress.
+    # This prevents low-quality noise even if someone has decent composite.
+    pre_gate_count = len(filtered)
+    if sort_by in ("pressure", "pressure_score"):
+        filtered = [
+            r for r in filtered
+            if _get_pressure(r) >= max(15, filter_threshold)  # require real pressure
+            and (
+                (r.get("ftd") or {}).get("latest_ftd", 0) > 50000  # some actual FTDs
+                or (r.get("pressure_score") or {}).get("components", {}).get("lending", 0) > 20
+            )
+        ]
+    quality_gate_filtered = pre_gate_count - len(filtered)
 
     output = {
         "as_of": datetime.now(UTC).isoformat(),
@@ -251,9 +341,12 @@ def scan(
         "universe_sources": universe_sources,
         "scored": len(results),
         "returned": len(filtered),
+        "quality_gate_filtered": quality_gate_filtered,
         "weights": weights,
         "regime": regime,
         "min_score": min_score,
+        "min_pressure": min_pressure,
+        "sort_by": sort_by,
         "results": filtered,
         "excluded": errors,
         "cached": False,

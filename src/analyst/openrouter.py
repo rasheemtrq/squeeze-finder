@@ -1,6 +1,11 @@
 """
 OpenRouter client for analyst narrative generation.
-Uses Claude Haiku 4.5 — paid; ~$0.004 per narrative call.
+
+Model selection lives in config (`OPENROUTER_MODELS`) and defaults to FREE
+OpenRouter models that support JSON-mode output. Set OPENROUTER_MODELS to a
+paid id (e.g. anthropic/claude-haiku-4.5) to upgrade quality. A free
+OpenRouter API key is still required.
+
 Output is always a structured dict: {tldr, bull: [...], bear: [...], model_used}.
 """
 from __future__ import annotations
@@ -11,14 +16,13 @@ from typing import Any
 
 import httpx
 
-from src.config import OPENROUTER_API_KEY
+from src.config import OPENROUTER_API_KEY, OPENROUTER_MODELS
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
-MODELS = [
-    "anthropic/claude-haiku-4.5",
-    "anthropic/claude-haiku-4-5",  # fallback — some routers use dash, not dot
-]
+# Tried in order for every narrative call; the first that returns valid JSON
+# wins. Configurable via the OPENROUTER_MODELS env var (see src/config.py).
+MODELS = OPENROUTER_MODELS
 
 SYSTEM = (
     "You are a terse equity analyst. Given a JSON facts block about a potential "
@@ -38,7 +42,24 @@ class OpenRouterError(Exception):
     pass
 
 
-def _extract_json(text: str) -> dict | None:
+def _content(body: dict) -> str | None:
+    """Pull the message text from an OpenRouter response, None-safe.
+
+    Some free models (esp. reasoning models) return content=null and put text
+    in a `reasoning` field, or return nothing when the token budget is spent on
+    reasoning. Returning None here lets the caller fail over to the next model
+    instead of crashing.
+    """
+    try:
+        msg = body["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return msg.get("content") or msg.get("reasoning")
+
+
+def _extract_json(text: str | None) -> dict | None:
+    if not text:
+        return None
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(json)?\s*", "", text)
@@ -79,9 +100,7 @@ def _call(model: str, facts_json: str, timeout: float = 45) -> dict | None:
         timeout=timeout,
     )
     r.raise_for_status()
-    body = r.json()
-    content = body["choices"][0]["message"]["content"]
-    return _extract_json(content)
+    return _extract_json(_content(r.json()))
 
 
 def _validate(obj: Any) -> dict | None:
@@ -102,7 +121,7 @@ def _validate(obj: Any) -> dict | None:
 
 
 def generate_narrative(facts: dict) -> dict:
-    """Generate via Claude Haiku 4.5 (paid). Tries id variants for routing safety."""
+    """Generate the squeeze narrative via the configured OpenRouter model chain."""
     facts_json = json.dumps(facts, default=str, indent=2)
     last_error = None
 
@@ -168,8 +187,7 @@ def _call_zero_dte(model: str, facts_json: str, timeout: float = 45) -> dict | N
         timeout=timeout,
     )
     r.raise_for_status()
-    body = r.json()
-    return _extract_json(body["choices"][0]["message"]["content"])
+    return _extract_json(_content(r.json()))
 
 
 def _validate_zero_dte(obj: Any) -> dict | None:
@@ -195,7 +213,7 @@ def _validate_zero_dte(obj: Any) -> dict | None:
 
 
 def generate_zero_dte_narrative(facts: dict) -> dict:
-    """Generate Haiku 0DTE analysis. Same routing/fallback shape as squeeze narrative."""
+    """Generate the 0DTE analysis. Same routing/fallback shape as squeeze narrative."""
     facts_json = json.dumps(facts, default=str, indent=2)
     last_error = None
 
@@ -258,11 +276,11 @@ def _call_quicktake(model: str, facts_json: str, timeout: float = 25) -> dict | 
         timeout=timeout,
     )
     r.raise_for_status()
-    return _extract_json(r.json()["choices"][0]["message"]["content"])
+    return _extract_json(_content(r.json()))
 
 
 def generate_quicktake(facts: dict) -> dict:
-    """One-sentence Haiku take. ~$0.001/call, ~2s latency."""
+    """One-sentence take via the configured OpenRouter model chain."""
     facts_json = json.dumps(facts, default=str, indent=2)
     last_error = None
     for model in MODELS:
