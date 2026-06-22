@@ -103,6 +103,20 @@ export function PriceChart({ symbol }: { symbol: string }) {
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: true,
+      // Keep SL and the shown TP target inside the visible range so both
+      // markers are always on-chart — the gap from price to TP reads as the
+      // potential gain. (5×/10× only when log scale is on, else it crushes.)
+      autoscaleInfoProvider: (original) => {
+        const res = original();
+        if (!res || !res.priceRange) return res;
+        const lv = data.levels;
+        const highs = [res.priceRange.maxValue, lv.target_2x];
+        if (logScale) highs.push(lv.target_5x, lv.target_10x);
+        const minV = Math.min(res.priceRange.minValue, lv.stop);
+        const maxV = Math.max(...highs);
+        const pad = (maxV - minV) * 0.04;
+        return { priceRange: { minValue: minV - pad, maxValue: maxV + pad } };
+      },
     });
     priceRef.current = price;
 
