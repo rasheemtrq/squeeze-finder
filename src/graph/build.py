@@ -129,3 +129,33 @@ def build(
     n_trades = _ingest_trades(g, trades_path)
     n_snap = _ingest_snapshots(g, window_days) if seed_snapshots else 0
     return g, {"bot_trades": n_trades, "snapshot_trades": n_snap}
+
+
+def demo_graph() -> KnowledgeGraph:
+    """Synthetic graph for previewing the brain UI before real trades accrue.
+
+    Clearly-labeled sample data (not real trades) so the visualization has
+    something to render and the shape of "what the bot learns" is legible.
+    """
+    g = KnowledgeGraph()
+    # (signal combo, list of realized-R outcomes) — hand-picked to show edge
+    plays = [
+        (["si:high_settlement_pressure", "sentiment:convergent_bullish"],
+         [2.1, 1.4, -1, 1.8, 0.6, 2.4, -1, 1.2, 0.9, -1, 1.6, 2.0]),
+        (["sentiment:wsb_surge", "si:shorts_piling_in"],
+         [2.6, -1, 1.9, 3.0, -1, 1.2, 2.2, -1, 1.5, 2.8]),
+        (["ta:breakout_highvol"], [1.2, -1, 0.8, 1.5, -1, 2.0, 0.4, 1.1, -1]),
+        (["ta:breakout_lowvol"], [-1, -1, 0.4, -1, 0.6, -1, -1, 0.2, -1]),
+        (["options:untradable_chain"], [-1, -0.6, -1, -1, 0.3, -1, -1, -1]),
+        (["si:institutional_lockup", "sentiment:hot"],
+         [1.8, 2.2, -1, 1.4, 1.0, -1, 2.6, 0.8, 1.6, -1, 1.2]),
+        (["si:insiders_dumping"], [-1, -1, 0.2, -1, -1, -1, -0.8, -1]),
+    ]
+    tickers = ["NBIS", "ASTS", "GME", "BBAI", "HIMS", "QS", "MU", "IREN"]
+    ti = 0
+    for flags, outcomes in plays:
+        for r in outcomes:
+            attrs = _attributes(flags, tickers[ti % len(tickers)], strategy="long_call", dte=24, delta=0.34)
+            g.add_trade(attrs, won=r > 0, r=r, plpc=r * 50)
+            ti += 1
+    return g

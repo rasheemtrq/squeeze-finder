@@ -401,6 +401,29 @@ def chart_endpoint(symbol: str, period: str = "3mo") -> dict:
     }
 
 
+@app.get("/api/graph")
+def graph_endpoint(demo: bool = False) -> dict:
+    """Trade knowledge graph (the bot's 'brain'): nodes/edges + learned insights.
+
+    Real data by default (empty until the paper bot logs trades). ?demo=true
+    returns a clearly-labeled synthetic graph so the visualization is legible
+    before real trades accrue.
+    """
+    from src.graph.build import build, demo_graph
+    from src.graph.insights import rank_combos, rank_signals, summary
+
+    g = demo_graph() if demo else build()[0]
+    return {
+        **g.to_dict(),
+        "demo": demo,
+        "insights": {
+            "summary": summary(g),
+            "signals": rank_signals(g),
+            "combos": rank_combos(g),
+        },
+    }
+
+
 # ------------- tracker -------------
 
 

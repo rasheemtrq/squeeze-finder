@@ -208,6 +208,49 @@ export function fetchChart(symbol: string, period: string = "3mo"): Promise<Char
   return jsonFetch<ChartData>(`/api/ticker/${symbol.toUpperCase()}/chart?period=${period}`);
 }
 
+export type GraphNode = {
+  id: string;
+  type: string;
+  label: string;
+  n: number;
+  wins: number;
+  win_rate: number;
+  avg_r: number;
+  avg_plpc: number;
+};
+export type GraphEdge = {
+  source: string;
+  target: string;
+  type: string;
+  n: number;
+  wins: number;
+  avg_r: number;
+  win_rate: number;
+};
+export type SignalRow = { signal: string; n: number; win_rate: number; avg_r: number };
+export type GraphData = {
+  n_trades: number;
+  demo: boolean;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  insights: {
+    summary: {
+      n_trades: number;
+      n_nodes: number;
+      n_edges: number;
+      signals_actionable: number;
+      min_trades: number;
+      underpowered: boolean;
+    };
+    signals: { best: SignalRow[]; worst: SignalRow[] };
+    combos: { combo: string[]; n: number; win_rate: number; avg_r: number }[];
+  };
+};
+
+export function fetchGraph(demo = false): Promise<GraphData> {
+  return jsonFetch<GraphData>(`/api/graph${demo ? "?demo=true" : ""}`);
+}
+
 export type OptionContract = {
   ticker: string;
   expiry: string;
