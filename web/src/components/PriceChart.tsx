@@ -7,6 +7,7 @@ import {
   HistogramSeries,
   LineStyle,
   PriceScaleMode,
+  type AutoscaleInfo,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -106,7 +107,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
       // Keep SL and the shown TP target inside the visible range so both
       // markers are always on-chart — the gap from price to TP reads as the
       // potential gain. (5×/10× only when log scale is on, else it crushes.)
-      autoscaleInfoProvider: (original) => {
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
         const res = original();
         if (!res || !res.priceRange) return res;
         const lv = data.levels;
