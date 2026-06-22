@@ -379,7 +379,9 @@ def options_recommendations(symbol: str, top: int = 8) -> dict:
 
 @app.get("/api/ticker/{symbol}/chart")
 def chart_endpoint(symbol: str, period: str = "3mo") -> dict:
-    """OHLCV + computed trade levels (entry, stop, 60d breakout, 2x/5x/10x targets)."""
+    """OHLCV + trade levels: ATR-risk SL/TP snapped to volume-profile S/R."""
+    from src.score.levels import compute_chart_levels
+
     symbol = symbol.upper()
     try:
         p = prices.fetch(symbol, period=period)
@@ -390,29 +392,12 @@ def chart_endpoint(symbol: str, period: str = "3mo") -> dict:
     if not bars:
         raise HTTPException(status_code=404, detail=f"no bars for {symbol}")
 
-    last = bars[-1]["close"]
-    highs = [b["high"] for b in bars]
-    lows = [b["low"] for b in bars]
-
-    prior_high_60 = max(highs[-61:-1]) if len(highs) >= 61 else max(highs[:-1] or highs)
-    recent_low_20 = min(lows[-20:]) if len(lows) >= 20 else min(lows)
-    stop = max(recent_low_20, last * 0.92)
-
-    levels = {
-        "entry": round(last, 2),
-        "stop": round(stop, 2),
-        "breakout_60d": round(prior_high_60, 2),
-        "target_2x": round(last * 2, 2),
-        "target_5x": round(last * 5, 2),
-        "target_10x": round(last * 10, 2),
-    }
-
     return {
         "ticker": symbol,
         "period": period,
         "as_of": p.get("as_of"),
         "bars": bars,
-        "levels": levels,
+        "levels": compute_chart_levels(bars),
     }
 
 

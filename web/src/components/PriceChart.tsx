@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   AreaSeries,
+  LineSeries,
   HistogramSeries,
   LineStyle,
   PriceScaleMode,
@@ -25,9 +26,9 @@ const VERCEL = {
   areaBottom: "rgba(59,158,255,0.0)",
   entry: "#ededed",
   sl: "#f56e7d",
-  tp1: "#6ee787",
-  tp2: "#3bd36f",
-  tp3: "#0070f3",
+  tp: "#6ee787",
+  poc: "#f5d16e",
+  ladder: "rgba(110,231,135,0.45)",
 };
 
 const PERIODS = [
@@ -36,6 +37,8 @@ const PERIODS = [
   { k: "6mo", label: "6M" },
   { k: "1y", label: "1Y" },
 ];
+
+const PROJECTION_DAYS = 35; // ~5 weeks of "potential gains" trajectory
 
 export function PriceChart({ symbol }: { symbol: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,10 +86,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
         mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
         scaleMargins: { top: 0.12, bottom: 0.18 },
       },
-      timeScale: {
-        borderColor: "#1f1f1f",
-        timeVisible: false,
-      },
+      timeScale: { borderColor: "#1f1f1f", timeVisible: false },
       crosshair: {
         vertLine: { color: "#404040", width: 1, style: LineStyle.Dashed },
         horzLine: { color: "#404040", width: 1, style: LineStyle.Dashed },
@@ -95,7 +95,10 @@ export function PriceChart({ symbol }: { symbol: string }) {
     });
     chartRef.current = chart;
 
-    // Smooth line (area) of close price — the "potential gains" path.
+    const l = data.levels;
+    const ladderMax = l.ladder.length ? Math.max(...l.ladder.map((t) => t.price)) : l.tp;
+
+    // Price as a smooth area line, autoscaled to always include SL + TP.
     const price = chart.addSeries(AreaSeries, {
       lineColor: VERCEL.line,
       topColor: VERCEL.areaTop,
@@ -104,17 +107,12 @@ export function PriceChart({ symbol }: { symbol: string }) {
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: true,
-      // Keep SL and the shown TP target inside the visible range so both
-      // markers are always on-chart — the gap from price to TP reads as the
-      // potential gain. (5×/10× only when log scale is on, else it crushes.)
       autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
         const res = original();
         if (!res || !res.priceRange) return res;
-        const lv = data.levels;
-        const highs = [res.priceRange.maxValue, lv.target_2x];
-        if (logScale) highs.push(lv.target_5x, lv.target_10x);
-        const minV = Math.min(res.priceRange.minValue, lv.stop);
-        const maxV = Math.max(...highs);
+        const top = logScale ? ladderMax : l.tp;
+        const minV = Math.min(res.priceRange.minValue, l.stop);
+        const maxV = Math.max(res.priceRange.maxValue, top);
         const pad = (maxV - minV) * 0.04;
         return { priceRange: { minValue: minV - pad, maxValue: maxV + pad } };
       },
@@ -126,17 +124,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
       priceScaleId: "vol",
       color: "rgba(143,143,143,0.30)",
     });
-    chart.priceScale("vol").applyOptions({
-      scaleMargins: { top: 0.85, bottom: 0 },
-    });
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     volumeRef.current = volume;
 
     const toUTC = (ymd: string): UTCTimestamp =>
       (Math.floor(new Date(ymd + "T00:00:00Z").getTime() / 1000) as UTCTimestamp);
 
-    price.setData(
-      data.bars.map((b) => ({ time: toUTC(b.date), value: b.close })),
-    );
+    price.setData(data.bars.map((b) => ({ time: toUTC(b.date), value: b.close })));
     volume.setData(
       data.bars.map((b) => ({
         time: toUTC(b.date),
@@ -145,31 +139,48 @@ export function PriceChart({ symbol }: { symbol: string }) {
       })),
     );
 
+    // Dashed projection: today's price → TP, extended into the future. The
+    // slope/length is the potential-gains trajectory.
+    const lastBar = data.bars[data.bars.length - 1];
+    const lastTime = toUTC(lastBar.date);
+    const projTime = (lastTime + PROJECTION_DAYS * 86400) as UTCTimestamp;
+    const projection = chart.addSeries(LineSeries, {
+      color: VERCEL.tp,
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    projection.setData([
+      { time: lastTime, value: lastBar.close },
+      { time: projTime, value: l.tp },
+    ]);
+
     const addLine = (
-      linePrice: number,
+      linePrice: number | null,
       color: string,
       title: string,
-      dashed = false,
+      style: LineStyle = LineStyle.Solid,
       width: 1 | 2 = 1,
     ) => {
+      if (linePrice == null) return;
       price.createPriceLine({
         price: linePrice,
         color,
         lineWidth: width,
-        lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+        lineStyle: style,
         axisLabelVisible: true,
         title,
       });
     };
 
-    const l = data.levels;
-    // SL below, TP above — the markers the user trades against.
-    addLine(l.entry, VERCEL.entry, "entry", false, 1);
-    addLine(l.stop, VERCEL.sl, "SL", true, 2);
-    addLine(l.target_2x, VERCEL.tp1, "TP", false, 2);
+    addLine(l.entry, VERCEL.entry, "entry", LineStyle.Solid, 1);
+    addLine(l.stop, VERCEL.sl, "SL", LineStyle.Dashed, 2);
+    addLine(l.tp, VERCEL.tp, "TP", LineStyle.Solid, 2);
+    addLine(l.poc, VERCEL.poc, "POC", LineStyle.Dotted, 1); // most-volume level
     if (logScale) {
-      addLine(l.target_5x, VERCEL.tp2, "TP 5×");
-      addLine(l.target_10x, VERCEL.tp3, "TP 10×");
+      l.ladder.forEach((t) => addLine(t.price, VERCEL.ladder, `${t.r}R`, LineStyle.Dotted, 1));
     }
 
     chart.timeScale().fitContent();
@@ -188,8 +199,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
     };
   }, [data, logScale]);
 
-  const entry = data?.levels.entry ?? 0;
-  const pct = (v: number) => (entry > 0 ? ((v / entry - 1) * 100) : 0);
+  const l = data?.levels;
 
   return (
     <div className="rounded-md ring-border bg-[var(--surface)] overflow-hidden">
@@ -197,7 +207,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
         <div className="flex items-center gap-2">
           <TrendingUp className="w-3.5 h-3.5 text-[var(--muted)]" />
           <span className="text-[10px] mono uppercase tracking-wider text-[var(--muted)]">
-            price · TP / SL levels
+            price · TP / SL · volume levels
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -225,7 +235,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
                 ? "bg-[var(--accent)]/15 border-[var(--accent)]/40 text-[var(--accent)]"
                 : "border-[var(--border)] text-[var(--muted)] hover:text-white",
             )}
-            title="toggle log scale to see the 5× / 10× take-profit targets"
+            title="toggle log scale to plot the R-multiple target ladder"
           >
             log
           </button>
@@ -251,22 +261,28 @@ export function PriceChart({ symbol }: { symbol: string }) {
         )}
       </div>
 
-      {data && !loading && !error && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2.5 border-t border-[var(--border)] bg-[var(--surface-2)] text-[10px] mono">
-          <Level label="entry" value={data.levels.entry} color={VERCEL.entry} />
-          <Level label="SL" value={data.levels.stop} color={VERCEL.sl} pct={pct(data.levels.stop)} />
-          <Level label="TP" value={data.levels.target_2x} color={VERCEL.tp1} pct={pct(data.levels.target_2x)} />
-          <Level label="TP 5×" value={data.levels.target_5x} color={VERCEL.tp2} pct={pct(data.levels.target_5x)} />
-          <Level label="TP 10×" value={data.levels.target_10x} color={VERCEL.tp3} pct={pct(data.levels.target_10x)} />
-          {!logScale && (
-            <span className="text-[var(--muted)] ml-auto">
-              toggle <span className="text-white">log</span> to plot 5× / 10× TP
-            </span>
-          )}
+      {l && !loading && !error && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 border-t border-[var(--border)] bg-[var(--surface-2)] text-[10px] mono">
+          <Level label="entry" value={l.entry} color={VERCEL.entry} />
+          <Level label="SL" value={l.stop} color={VERCEL.sl} pct={-l.risk_pct} note={basisLabel(l.sl_basis)} />
+          <Level label="TP" value={l.tp} color={VERCEL.tp} pct={l.tp_pct} note={basisLabel(l.tp_basis)} />
+          {l.poc != null && <Level label="POC" value={l.poc} color={VERCEL.poc} note="most volume" />}
+          <span className="ml-auto text-[var(--muted)]">
+            R:R <span className="text-white tabular-nums">{l.rr.toFixed(1)}</span>
+            <span className="mx-2 opacity-40">·</span>
+            <span className="text-white">log</span> for R-ladder
+          </span>
         </div>
       )}
     </div>
   );
+}
+
+function basisLabel(basis: string): string | undefined {
+  if (basis === "volume_support" || basis === "volume_resistance") return "vol";
+  if (basis === "atr_floor") return "atr";
+  if (basis === "r_multiple") return "3R";
+  return undefined;
 }
 
 function Level({
@@ -274,11 +290,13 @@ function Level({
   value,
   color,
   pct,
+  note,
 }: {
   label: string;
   value: number;
   color: string;
   pct?: number;
+  note?: string;
 }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -286,14 +304,12 @@ function Level({
       <span className="text-[var(--muted)]">{label}</span>
       <span className="tabular-nums">${value.toFixed(2)}</span>
       {pct !== undefined && (
-        <span
-          className="tabular-nums"
-          style={{ color: pct >= 0 ? VERCEL.tp1 : VERCEL.sl }}
-        >
+        <span className="tabular-nums" style={{ color: pct >= 0 ? VERCEL.tp : VERCEL.sl }}>
           {pct >= 0 ? "+" : ""}
           {pct.toFixed(0)}%
         </span>
       )}
+      {note && <span className="text-[var(--muted)] opacity-60">{note}</span>}
     </span>
   );
 }

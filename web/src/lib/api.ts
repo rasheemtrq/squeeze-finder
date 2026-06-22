@@ -190,10 +190,17 @@ export type ChartData = {
   levels: {
     entry: number;
     stop: number;
-    breakout_60d: number;
-    target_2x: number;
-    target_5x: number;
-    target_10x: number;
+    tp: number;
+    atr: number;
+    risk_pct: number;
+    rr: number;
+    tp_pct: number;
+    sl_basis: string;
+    tp_basis: string;
+    ladder: { r: number; price: number }[];
+    poc: number | null;
+    support: number | null;
+    resistance: number | null;
   };
 };
 
