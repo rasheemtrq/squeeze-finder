@@ -8,6 +8,7 @@ sandbox (https://paper-api.alpaca.markets).
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -16,6 +17,7 @@ from src.config import ALPACA_API_KEY, ALPACA_PAPER, ALPACA_SECRET_KEY
 
 PAPER_URL = "https://paper-api.alpaca.markets"
 LIVE_URL = "https://api.alpaca.markets"
+DATA_URL = "https://data.alpaca.markets"  # market data (crypto data is free; no separate sub)
 
 
 class AlpacaError(Exception):
@@ -118,6 +120,63 @@ class AlpacaClient:
 
     def crypto_positions(self) -> list[dict]:
         return [p for p in self.positions() if p.get("asset_class") == "crypto"]
+
+    def _data_get(self, path: str, params: dict | None = None) -> Any:
+        r = httpx.get(DATA_URL + path, headers=self._h, params=params, timeout=20)
+        r.raise_for_status()
+        return r.json()
+
+    def crypto_bars(
+        self, symbols: list[str], timeframe: str = "1Min", limit: int = 60
+    ) -> dict[str, list[dict]]:
+        """Recent OHLCV bars per symbol (last `limit` bars each), normalized.
+
+        Alpaca's `limit` is a TOTAL cap across all symbols and the response
+        paginates, so a single capped call starves most symbols. We bound by a
+        recent `start` window and follow next_page_token, then trim each symbol
+        to its most recent `limit` bars. Crypto data is real-time and free."""
+        # generous window: minutes may have no trades, so over-request bars.
+        start = (datetime.now(UTC) - timedelta(minutes=limit * 5 + 60)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        out: dict[str, list[dict]] = {}
+        page_token: str | None = None
+        for _ in range(15):  # page cap — backstop against runaway pagination
+            params: dict[str, Any] = {
+                "symbols": ",".join(symbols), "timeframe": timeframe,
+                "start": start, "limit": 10000,
+            }
+            if page_token:
+                params["page_token"] = page_token
+            data = self._data_get("/v1beta3/crypto/us/bars", params)
+            for sym, raw in (data.get("bars") or {}).items():
+                out.setdefault(sym, []).extend(
+                    {
+                        "date": b.get("t"),
+                        "open": float(b["o"]),
+                        "high": float(b["h"]),
+                        "low": float(b["l"]),
+                        "close": float(b["c"]),
+                        "volume": float(b.get("v") or 0),
+                    }
+                    for b in raw
+                )
+            page_token = data.get("next_page_token")
+            if not page_token:
+                break
+        return {sym: bars[-limit:] for sym, bars in out.items()}
+
+    def crypto_latest_quotes(self, symbols: list[str]) -> dict[str, dict]:
+        """Latest bid/ask per symbol with spread % (for cost modeling/entry)."""
+        data = self._data_get(
+            "/v1beta3/crypto/us/latest/quotes", {"symbols": ",".join(symbols)}
+        )
+        out: dict[str, dict] = {}
+        for sym, q in (data.get("quotes") or {}).items():
+            bid, ask = q.get("bp"), q.get("ap")
+            spread_pct = (ask - bid) / ask * 100 if bid and ask and ask > 0 else None
+            out[sym] = {"bid": bid, "ask": ask, "spread_pct": spread_pct}
+        return out
 
     def submit_crypto(
         self, symbol: str, notional: float, side: str = "buy", tif: str = "gtc"

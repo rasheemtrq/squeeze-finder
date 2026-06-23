@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.squeezefinder.scalp</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/rash/Documents/squeeze-finder/scripts/scalp_run.sh</string>
+  </array>
+
+  <!-- Intraday scalp — fire every 60s, 24/7. Each run is a single self-contained
+       cycle (state lives in positions + the trade log), so overlapping/missed
+       fires are harmless. Risk caps + daily-loss kill switch bound it. -->
+  <key>StartInterval</key>
+  <integer>60</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/scalp.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/scalp.launchd.err.log</string>
+</dict>
+</plist>

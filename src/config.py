@@ -96,6 +96,29 @@ CRYPTO_BOT_PARAMS = {
     "default_equity": float(os.getenv("CRYPTO_DEFAULT_EQUITY", "100000")),  # dry-run sizing fallback
 }
 
+# ------------- Intraday crypto SCALP bot (Alpaca) -------------
+# PAPER ONLY, same account. Fast intraday momentum on 1-minute bars: holds
+# minutes, fires every ~60s. The hard constraint is COST — Alpaca crypto is
+# 0.15%/0.25% maker/taker, so a market round-trip is ~0.5% before spread. Targets
+# must clear that, and every outcome is logged NET of fees+spread so paper P&L is
+# honest. Exits trigger on the gross move but are recorded net.
+SCALP_PARAMS = {
+    "risk_pct_per_trade": float(os.getenv("SCALP_RISK_PCT", "0.5")),        # tighter risk; more trades
+    "max_open_positions": int(os.getenv("SCALP_MAX_POSITIONS", "3")),
+    "max_daily_loss_pct": float(os.getenv("SCALP_MAX_DAILY_LOSS_PCT", "4.0")),
+    "max_deploy_pct": float(os.getenv("SCALP_MAX_DEPLOY_PCT", "40.0")),
+    "max_position_pct": float(os.getenv("SCALP_MAX_POSITION_PCT", "15.0")),
+    "min_score": float(os.getenv("SCALP_MIN_SCORE", "60")),                 # entry score floor (0-100)
+    "tp_pct": float(os.getenv("SCALP_TP_PCT", "2.0")),                      # gross take-profit %
+    "sl_pct": float(os.getenv("SCALP_SL_PCT", "1.0")),                      # gross stop %
+    "time_stop_minutes": int(os.getenv("SCALP_TIME_STOP_MIN", "45")),      # bail if neither hit
+    "min_atr_pct": float(os.getenv("SCALP_MIN_ATR_PCT", "0.15")),          # 1-min ATR floor so TP is reachable
+    "bars_lookback": int(os.getenv("SCALP_BARS", "60")),                   # 1-min bars per signal
+    "taker_fee_pct": float(os.getenv("SCALP_TAKER_FEE_PCT", "0.25")),      # per side; round-trip = 2x
+    "min_notional": float(os.getenv("SCALP_MIN_NOTIONAL", "10")),
+    "default_equity": float(os.getenv("SCALP_DEFAULT_EQUITY", "100000")),
+}
+
 CACHE_TTL = {
     "prices_intraday": 300,
     "prices_eod": 86400,

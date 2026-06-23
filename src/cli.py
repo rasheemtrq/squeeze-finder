@@ -698,6 +698,52 @@ def crypto_run_cmd(
     console.print_json(json.dumps(res, default=str))
 
 
+@app.command("crypto-scalp")
+def crypto_scalp_cmd(
+    execute: bool = typer.Option(False, "--execute", help="place PAPER scalp orders + manage exits (default: dry run)"),
+) -> None:
+    """Intraday crypto scalp cycle (1-min momentum). Default dry run; --execute trades PAPER.
+
+    Built to fire every ~60s. Take-profits are sized to clear Alpaca's ~0.5%
+    round-trip fee; outcomes are logged net of cost. 24/7."""
+    from src.bot.alpaca import AlpacaError
+    from src.crypto.scalp_runner import run
+
+    with console.status("running crypto scalp cycle..."):
+        try:
+            res = run(execute=execute)
+        except AlpacaError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            return
+
+    if execute:
+        console.print_json(json.dumps(res, default=str))
+        return
+
+    console.print(
+        f"[bold]scalp plan[/bold] (DRY RUN) · equity ${res['equity']:,.0f} · "
+        f"candidates {res['candidates']} · deploy ${res['deployed_usd']:,.0f}"
+    )
+    if not res["selected"]:
+        console.print("[yellow]no scalp setups right now (score floor / ATR / fee-clearing not met)[/yellow]")
+        return
+    table = Table(title="crypto scalp — 1-min momentum (DRY RUN, no orders)")
+    for col in ["#", "pair", "score", "notional", "rvol", "atr%", "tp/sl", "cost%", "breakeven wr"]:
+        table.add_column(col, justify="left" if col == "pair" else "right")
+    for i, p in enumerate(res["selected"], 1):
+        e, s = p["exit"], p["signal"]
+        table.add_row(
+            str(i), p["ticker"], f"{p['setup_score']}", f"${p['notional']:,.0f}",
+            f"{s['rvol']:.1f}", f"{s['atr_pct']:.2f}", f"+{e['tp_pct']:g}/-{e['sl_pct']:g}%",
+            f"{e['cost_pct']:.2f}", f"{e['breakeven_wr'] * 100:.0f}%",
+        )
+    console.print(table)
+    console.print(
+        "[dim]net of ~0.5% fees + spread · spot long · 24/7 · "
+        "`crypto-scalp --execute` to place PAPER orders[/dim]"
+    )
+
+
 @app.command("graph-build")
 def graph_build_cmd(
     seed_snapshots: bool = typer.Option(
