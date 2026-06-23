@@ -92,6 +92,57 @@ export function fetchSwingScan(params?: {
   return jsonFetch<SwingScanResult>(`/api/swing-scan${suffix}`);
 }
 
+export type CryptoLevels = {
+  entry: number;
+  stop: number;
+  tp: number;
+  rr: number;
+  risk_pct: number;
+  tp_pct: number;
+  sl_basis: string;
+  tp_basis: string;
+  poc: number | null;
+  support: number | null;
+  resistance: number | null;
+};
+
+export type CryptoResult = {
+  ticker: string;
+  yf_symbol: string;
+  score: number;
+  price: number;
+  flags: string[];
+  factors: {
+    trend: { score: number; flag: string | null };
+    breakout: { score: number; rvol: number | null; flag: string | null };
+    rs_vs_btc: {
+      score: number;
+      rs_1m_pp: number | null;
+      rs_3m_pp: number | null;
+      flag: string | null;
+    };
+  };
+  levels: CryptoLevels;
+};
+
+export type CryptoScanResult = {
+  universe: number;
+  scored: number;
+  errors: string[];
+  results: CryptoResult[];
+};
+
+export function fetchCryptoScan(params?: {
+  limit?: number;
+  min_score?: number;
+}): Promise<CryptoScanResult> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.min_score) qs.set("min_score", String(params.min_score));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return jsonFetch<CryptoScanResult>(`/api/crypto-scan${suffix}`);
+}
+
 export type Narrative = {
   ticker: string;
   score: number;

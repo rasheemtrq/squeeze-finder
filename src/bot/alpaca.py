@@ -106,4 +106,31 @@ class AlpacaClient:
         )
 
     def close_position(self, symbol: str) -> dict:
-        return self._delete(f"/v2/positions/{symbol}")
+        # Alpaca's positions endpoint keys crypto by the FLAT symbol ('BTCUSD'),
+        # not the slashed order form ('BTC/USD') — strip the slash. No-op for
+        # alphanumeric OCC option symbols.
+        return self._delete(f"/v2/positions/{symbol.replace('/', '')}")
+
+    # ---- spot crypto (same paper account; 24/7)
+    def crypto_assets(self) -> list[dict]:
+        """Active, tradable crypto assets on the account."""
+        return self._get("/v2/assets", {"asset_class": "crypto", "status": "active"})
+
+    def crypto_positions(self) -> list[dict]:
+        return [p for p in self.positions() if p.get("asset_class") == "crypto"]
+
+    def submit_crypto(
+        self, symbol: str, notional: float, side: str = "buy", tif: str = "gtc"
+    ) -> dict:
+        """Market order for a dollar `notional` of spot crypto. Crypto requires a
+        GTC/IOC time-in-force (not 'day'); notional orders buy fractional size."""
+        return self._post(
+            "/v2/orders",
+            {
+                "symbol": symbol,
+                "notional": str(round(notional, 2)),
+                "side": side,
+                "type": "market",
+                "time_in_force": tif,
+            },
+        )

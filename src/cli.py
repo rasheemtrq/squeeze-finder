@@ -616,6 +616,88 @@ def bot_run_cmd(
     console.print_json(json.dumps(res, default=str))
 
 
+@app.command("crypto-scan")
+def crypto_scan_cmd(limit: int = 15) -> None:
+    """Rank the spot-crypto universe by momentum (trend + breakout + RS vs BTC)."""
+    from src.crypto.scanner import scan_crypto
+
+    with console.status("scanning crypto momentum..."):
+        res = scan_crypto(limit=limit)
+    console.print(
+        f"[bold]crypto momentum[/bold] · universe {res['universe']} · scored {res['scored']}"
+    )
+    if not res["results"]:
+        console.print("[yellow]no coins scored (check data availability)[/yellow]")
+        return
+    table = Table(title="spot crypto — momentum scan")
+    for col in ["#", "pair", "score", "price", "trend", "breakout", "RS", "rvol", "entry→stop→TP"]:
+        table.add_column(col, justify="left" if col == "pair" else "right")
+    for i, r in enumerate(res["results"], 1):
+        f, lv = r["factors"], r["levels"]
+        table.add_row(
+            str(i), r["ticker"], f"{r['score']}", f"${r['price']:,.4g}",
+            f"{f['trend']['score']:.0f}", f"{f['breakout']['score']:.0f}",
+            f"{f['rs_vs_btc']['score']:.0f}",
+            f"{f['breakout'].get('rvol') or 0:.1f}",
+            f"${lv['entry']:g}→${lv['stop']:g}→${lv['tp']:g}",
+        )
+    console.print(table)
+
+
+@app.command("crypto-plan")
+def crypto_plan_cmd(limit: int = 15) -> None:
+    """Dry-run: build today's paper-bot spot-crypto plan (no orders placed)."""
+    from src.crypto.runner import run
+
+    with console.status("building crypto plan (scan + sizing)..."):
+        plan = run(execute=False, limit=limit)
+    console.print(
+        f"[bold]crypto plan[/bold] · equity ${plan['equity']:,.0f} · "
+        f"scanned {plan['scanned']} · candidates {plan['candidates']} · "
+        f"deploy ${plan['deployed_usd']:,.0f}/${plan['deploy_cap_usd']:,.0f}"
+    )
+    if not plan["selected"]:
+        console.print("[yellow]no qualifying setups (check min score / risk caps)[/yellow]")
+        return
+    table = Table(title="paper bot — spot crypto plan (DRY RUN, no orders)")
+    for col in ["#", "pair", "score", "notional", "risk $", "entry", "stop", "TP", "R:R"]:
+        table.add_column(col, justify="left" if col == "pair" else "right")
+    for i, p in enumerate(plan["selected"], 1):
+        u = p["underlying"]
+        table.add_row(
+            str(i), p["ticker"], f"{p['setup_score']}", f"${p['notional']:,.0f}",
+            f"${p['risk_usd']:,.0f}", f"${(u.get('entry') or 0):g}",
+            f"${(u.get('stop') or 0):g}", f"${(u.get('tp') or 0):g}",
+            f"{u.get('rr') or 0:.1f}",
+        )
+    console.print(table)
+    console.print(
+        "[dim]spot long · risk = notional × stop% · 24/7 · "
+        "`crypto-run --execute` to place PAPER orders[/dim]"
+    )
+
+
+@app.command("crypto-run")
+def crypto_run_cmd(
+    execute: bool = typer.Option(False, "--execute", help="place PAPER spot orders + manage exits (default: dry run)"),
+    limit: int = 15,
+) -> None:
+    """Run one crypto bot cycle. Default is a dry run; --execute places PAPER orders."""
+    from src.bot.alpaca import AlpacaError
+    from src.crypto.runner import run
+
+    if not execute:
+        crypto_plan_cmd(limit=limit)
+        return
+    with console.status("running crypto bot cycle (paper execute)..."):
+        try:
+            res = run(execute=True, limit=limit)
+        except AlpacaError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            return
+    console.print_json(json.dumps(res, default=str))
+
+
 @app.command("graph-build")
 def graph_build_cmd(
     seed_snapshots: bool = typer.Option(

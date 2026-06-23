@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.squeezefinder.crypto</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/rash/Documents/squeeze-finder/scripts/crypto_run.sh</string>
+  </array>
+
+  <!-- Crypto is 24/7 — fire every 30 min, all day. The runner has no market
+       clock to gate on; risk caps + the daily-loss kill switch bound it. -->
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/crypto.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/crypto.launchd.err.log</string>
+</dict>
+</plist>

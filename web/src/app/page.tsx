@@ -16,9 +16,10 @@ export default function Home() {
             catalyst proximity (10). Free data sources only.
           </p>
         </div>
-        <a href="/brain" className="shrink-0 text-[10px] mono text-[var(--muted)] hover:text-white transition-colors">
-          bot brain →
-        </a>
+        <div className="shrink-0 flex gap-3 text-[10px] mono text-[var(--muted)]">
+          <a href="/crypto" className="hover:text-white transition-colors">crypto →</a>
+          <a href="/brain" className="hover:text-white transition-colors">bot brain →</a>
+        </div>
       </div>
 
       <Suspense fallback={<TableSkeleton rows={12} />}>

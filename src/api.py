@@ -313,6 +313,20 @@ def swing_scan_endpoint(
     return swing_scan(tickers=universe, weights=weights, min_score=min_score, limit=limit)
 
 
+@app.get("/api/crypto-scan")
+def crypto_scan_endpoint(
+    limit: int = Query(25, ge=1, le=100),
+    min_score: float = Query(0, ge=0, le=100),
+) -> dict:
+    """Spot-crypto momentum scan over the liquid Alpaca-tradable USD universe:
+    trend stage + volume-confirmed breakout + relative strength vs BTC. No
+    short-interest / gamma (crypto has no such microstructure) — different
+    scoring than the equity scans. Same data the paper crypto bot trades on."""
+    from src.crypto.scanner import scan_crypto
+
+    return scan_crypto(limit=limit, min_score=min_score)
+
+
 @app.get("/api/zero-dte")
 def zero_dte_endpoint(top_per_side: int = Query(3, ge=1, le=10), refresh: bool = False) -> dict:
     """Same-day-expiry options ranked by 2x/5x/10x payoff probability.

@@ -69,6 +69,33 @@ BOT_PARAMS = {
     "default_equity": float(os.getenv("BOT_DEFAULT_EQUITY", "100000")),  # dry-run sizing when no Alpaca account
 }
 
+# ------------- Spot-crypto momentum bot (Alpaca) -------------
+# PAPER ONLY, same paper account + AlpacaClient as the options bot. Spot crypto
+# is plain long exposure (no leverage / liquidation / funding), so risk is
+# defined: max loss = notional bought. Sizing is risk-normalized to the ATR/
+# volume stop. Crypto trades 24/7 — the crypto runner has no market-hours gate.
+# Candidate universe: liquid USD-quoted majors; intersected with Alpaca's live
+# tradable set at runtime and skipped if yfinance lacks history.
+CRYPTO_UNIVERSE = [
+    "BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "LINK/USD", "LTC/USD",
+    "BCH/USD", "UNI/USD", "AAVE/USD", "DOGE/USD", "XRP/USD", "DOT/USD",
+    "MKR/USD", "CRV/USD", "XTZ/USD", "GRT/USD", "SHIB/USD", "YFI/USD",
+    "SUSHI/USD", "BAT/USD",
+]
+
+# Hard risk caps for the crypto bot — checked before every order. Override via env.
+CRYPTO_BOT_PARAMS = {
+    "risk_pct_per_trade": float(os.getenv("CRYPTO_RISK_PCT", "1.0")),        # % equity risked to the stop
+    "max_open_positions": int(os.getenv("CRYPTO_MAX_POSITIONS", "5")),
+    "max_daily_loss_pct": float(os.getenv("CRYPTO_MAX_DAILY_LOSS_PCT", "5.0")),
+    "max_deploy_pct": float(os.getenv("CRYPTO_MAX_DEPLOY_PCT", "30.0")),     # total notional-at-risk cap
+    "max_position_pct": float(os.getenv("CRYPTO_MAX_POSITION_PCT", "10.0")), # per-name notional cap
+    "min_setup_score": float(os.getenv("CRYPTO_MIN_SCORE", "55")),          # momentum composite floor
+    "time_stop_days": int(os.getenv("CRYPTO_TIME_STOP_DAYS", "21")),        # close after N days held
+    "min_notional": float(os.getenv("CRYPTO_MIN_NOTIONAL", "10")),          # skip orders below this
+    "default_equity": float(os.getenv("CRYPTO_DEFAULT_EQUITY", "100000")),  # dry-run sizing fallback
+}
+
 CACHE_TTL = {
     "prices_intraday": 300,
     "prices_eod": 86400,
