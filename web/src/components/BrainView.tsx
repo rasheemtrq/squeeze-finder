@@ -9,6 +9,7 @@ export function BrainView() {
   const [isDemo, setIsDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,8 +44,9 @@ export function BrainView() {
   if (!data) return null;
 
   const sigNodes = data.nodes.filter((n) => n.type === "signal");
-  const ids = new Set(sigNodes.map((n) => n.id));
-  const sigEdges = data.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+  const vizNodes = showAll ? data.nodes : sigNodes;
+  const vizIds = new Set(vizNodes.map((n) => n.id));
+  const vizEdges = data.edges.filter((e) => vizIds.has(e.source) && vizIds.has(e.target));
   const minTrades = data.insights.summary.min_trades;
   const s = data.insights.summary;
 
@@ -58,7 +60,24 @@ export function BrainView() {
         </div>
       )}
 
-      <BrainGraph nodes={sigNodes} edges={sigEdges} minTrades={minTrades} />
+      <div className="flex justify-end">
+        <div className="flex gap-0.5 bg-[var(--surface-2)] rounded p-0.5 text-[10px] mono">
+          {([["all", true], ["signals only", false]] as const).map(([label, val]) => (
+            <button
+              key={label}
+              onClick={() => setShowAll(val)}
+              className={
+                "px-2 py-0.5 rounded transition-colors " +
+                (showAll === val ? "bg-white/10 text-white" : "text-[var(--muted)] hover:text-white")
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <BrainGraph nodes={vizNodes} edges={vizEdges} minTrades={minTrades} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Panel title="strongest signals">
