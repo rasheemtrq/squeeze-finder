@@ -53,6 +53,16 @@ class AlpacaClient:
         r.raise_for_status()
         return r.json() if r.text.strip() else {}
 
+    # ---- market clock
+    def clock(self) -> dict:
+        return self._get("/v2/clock")
+
+    def is_market_open(self) -> bool:
+        try:
+            return bool(self.clock().get("is_open"))
+        except Exception:
+            return False
+
     # ---- account / positions
     def account(self) -> dict:
         return self._get("/v2/account")

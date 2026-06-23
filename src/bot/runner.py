@@ -145,6 +145,13 @@ def run(execute: bool = False, limit: int = 15, params: dict | None = None) -> d
     from src.bot.alpaca import AlpacaClient
 
     client = AlpacaClient()  # paper-guarded; raises if pointed at live or no keys
+
+    # Self-gate on the market clock so a frequent timer never fires off-hours
+    # orders (the exchange rejects them). Timezone-proof — Alpaca is the source.
+    if not client.is_market_open():
+        _log({"event": "skip", "reason": "market_closed"})
+        return {"mode": "market_closed", "note": "market closed — no orders placed"}
+
     account = client.account()
     equity = float(account.get("equity") or params["default_equity"])
     pl_pct = _daily_pl_pct(account)
@@ -162,6 +169,14 @@ def run(execute: bool = False, limit: int = 15, params: dict | None = None) -> d
 
     closed = manage_exits(client, params)
     open_positions = client.positions()
+    if len(open_positions) >= params["max_open_positions"]:
+        # Slots full — managed exits above; don't build plans (avoids wasteful
+        # option-chain fetches when nothing can be opened).
+        return {
+            "mode": "executed", "equity": equity, "daily_pl_pct": round(pl_pct, 2),
+            "closed": closed, "placed": [], "errors": [],
+            "note": "max positions held — managed exits only",
+        }
     held_underlyings = {_underlying_of(p["symbol"]) for p in open_positions}
 
     plan = build_daily_plan(
