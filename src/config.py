@@ -119,6 +119,25 @@ SCALP_PARAMS = {
     "default_equity": float(os.getenv("SCALP_DEFAULT_EQUITY", "100000")),
 }
 
+# ------------- Swing-share bot (Alpaca equities) -------------
+# PAPER ONLY, same account. Buys actual SHARES on the swing scanner's setups
+# (Stage-2 trend + volume breakout + RS vs SPY), sized to the trade plan's ATR/
+# structural stop, held for weeks with R-multiple targets. Trades during regular
+# hours only (the runner gates on the Alpaca clock). This is the stock strategy;
+# the options-on-squeeze bot is retired.
+SWING_BOT_PARAMS = {
+    "risk_pct_per_trade": float(os.getenv("SWING_RISK_PCT", "1.0")),        # % equity risked to the stop
+    "max_open_positions": int(os.getenv("SWING_MAX_POSITIONS", "8")),
+    "max_daily_loss_pct": float(os.getenv("SWING_MAX_DAILY_LOSS_PCT", "4.0")),
+    "max_deploy_pct": float(os.getenv("SWING_MAX_DEPLOY_PCT", "80.0")),     # shares = defined exposure; can run high
+    "max_position_pct": float(os.getenv("SWING_MAX_POSITION_PCT", "15.0")),
+    "min_setup_score": float(os.getenv("SWING_MIN_SCORE", "55")),
+    "time_stop_days": int(os.getenv("SWING_TIME_STOP_DAYS", "40")),         # ~8 weeks max hold
+    "min_notional": float(os.getenv("SWING_MIN_NOTIONAL", "10")),
+    "scan_limit": int(os.getenv("SWING_SCAN_LIMIT", "40")),
+    "default_equity": float(os.getenv("SWING_DEFAULT_EQUITY", "100000")),
+}
+
 CACHE_TTL = {
     "prices_intraday": 300,
     "prices_eod": 86400,

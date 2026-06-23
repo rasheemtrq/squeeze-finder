@@ -107,6 +107,26 @@ class AlpacaClient:
             },
         )
 
+    # ---- equities (shares) for the swing bot
+    def equity_positions(self) -> list[dict]:
+        return [p for p in self.positions() if p.get("asset_class") == "us_equity"]
+
+    def submit_equity(
+        self, symbol: str, notional: float, side: str = "buy", tif: str = "day"
+    ) -> dict:
+        """Market order for a dollar `notional` of shares. Fractional notional
+        market orders require tif='day' and only fill during regular hours."""
+        return self._post(
+            "/v2/orders",
+            {
+                "symbol": symbol.upper(),
+                "notional": str(round(notional, 2)),
+                "side": side,
+                "type": "market",
+                "time_in_force": tif,
+            },
+        )
+
     def close_position(self, symbol: str) -> dict:
         # Alpaca's positions endpoint keys crypto by the FLAT symbol ('BTCUSD'),
         # not the slashed order form ('BTC/USD') — strip the slash. No-op for

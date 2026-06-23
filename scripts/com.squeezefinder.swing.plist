@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.squeezefinder.swing</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/rash/Documents/squeeze-finder/scripts/swing_run.sh</string>
+  </array>
+
+  <!-- Fire every 30 min (:00 and :30). The bot checks the Alpaca clock and
+       no-ops when the market is closed, so this stays timezone-proof and only
+       trades during regular hours. Swing holds run weeks. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Minute</key><integer>30</integer></dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/swing.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/rash/Documents/squeeze-finder/data/swing.launchd.err.log</string>
+</dict>
+</plist>

@@ -744,6 +744,59 @@ def crypto_scalp_cmd(
     )
 
 
+@app.command("swing-bot-plan")
+def swing_bot_plan_cmd() -> None:
+    """Dry-run: build the swing-share plan (buys actual shares; no orders placed)."""
+    from src.swing.runner import run
+
+    with console.status("building swing-share plan (swing scan + sizing)..."):
+        plan = run(execute=False)
+    console.print(
+        f"[bold]swing-share plan[/bold] · equity ${plan['equity']:,.0f} · "
+        f"scanned {plan['scanned']} · candidates {plan['candidates']} · "
+        f"deploy ${plan['deployed_usd']:,.0f}/${plan['deploy_cap_usd']:,.0f}"
+    )
+    if not plan["selected"]:
+        console.print("[yellow]no qualifying swing setups (check min score / risk caps)[/yellow]")
+        return
+    table = Table(title="swing-share bot plan (DRY RUN, no orders)")
+    for col in ["#", "ticker", "score", "notional", "risk $", "entry", "stop", "tp", "R:R", "stop %"]:
+        table.add_column(col, justify="left" if col == "ticker" else "right")
+    for i, p in enumerate(plan["selected"], 1):
+        u, e = p["underlying"], p["exit"]
+        table.add_row(
+            str(i), p["ticker"], f"{p['setup_score']}", f"${p['notional']:,.0f}",
+            f"${p['risk_usd']:,.0f}", f"${(u.get('entry') or 0):g}",
+            f"${(u.get('stop') or 0):g}", f"${(u.get('tp') or 0):g}",
+            f"{u.get('rr') or 0:.1f}", f"{e['sl_pct']:g}%",
+        )
+    console.print(table)
+    console.print(
+        "[dim]shares · risk = notional × stop% · regular hours · "
+        "`swing-bot-run --execute` to place PAPER orders[/dim]"
+    )
+
+
+@app.command("swing-bot-run")
+def swing_bot_run_cmd(
+    execute: bool = typer.Option(False, "--execute", help="place PAPER share orders + manage exits (default: dry run)"),
+) -> None:
+    """Run one swing-share bot cycle. Default is a dry run; --execute places PAPER orders."""
+    from src.bot.alpaca import AlpacaError
+    from src.swing.runner import run
+
+    if not execute:
+        swing_bot_plan_cmd()
+        return
+    with console.status("running swing-share bot cycle (paper execute)..."):
+        try:
+            res = run(execute=True)
+        except AlpacaError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            return
+    console.print_json(json.dumps(res, default=str))
+
+
 @app.command("graph-build")
 def graph_build_cmd(
     seed_snapshots: bool = typer.Option(
