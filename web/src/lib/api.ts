@@ -143,6 +143,34 @@ export function fetchCryptoScan(params?: {
   return jsonFetch<CryptoScanResult>(`/api/crypto-scan${suffix}`);
 }
 
+export type BigFishRow = {
+  symbol: string;
+  volume: number;
+  trade_count: number;
+  price: number;
+  change_pct: number;
+  dollar_volume: number;
+};
+
+export type BigFishData = {
+  as_of: string;
+  sort_by: string;
+  count: number;
+  rows: BigFishRow[];
+  cached?: boolean;
+};
+
+export function fetchBigFish(params?: {
+  top?: number;
+  sort_by?: string;
+}): Promise<BigFishData> {
+  const qs = new URLSearchParams();
+  if (params?.top) qs.set("top", String(params.top));
+  if (params?.sort_by) qs.set("sort_by", params.sort_by);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return jsonFetch<BigFishData>(`/api/big-fish${suffix}`);
+}
+
 export type Narrative = {
   ticker: string;
   score: number;

@@ -327,6 +327,22 @@ def crypto_scan_endpoint(
     return scan_crypto(limit=limit, min_score=min_score)
 
 
+@app.get("/api/big-fish")
+def big_fish_endpoint(
+    top: int = Query(25, ge=1, le=100),
+    sort_by: str = Query("dollar_volume", description="dollar_volume | volume | trades | change"),
+) -> dict:
+    """Market-wide volume leaders — 'follow the big fish'. Default ranks by dollar
+    volume (shares × price) so megacaps surface over low-price share churn."""
+    from src.bot.alpaca import AlpacaError
+    from src.data.bigfish import get_big_fish
+
+    try:
+        return get_big_fish(top=top, sort_by=sort_by)
+    except AlpacaError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
 @app.get("/api/zero-dte")
 def zero_dte_endpoint(top_per_side: int = Query(3, ge=1, le=10), refresh: bool = False) -> dict:
     """Same-day-expiry options ranked by 2x/5x/10x payoff probability.

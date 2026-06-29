@@ -17,6 +17,7 @@ export default function Home() {
           </p>
         </div>
         <div className="shrink-0 flex gap-3 text-[10px] mono text-[var(--muted)]">
+          <a href="/big-fish" className="hover:text-white transition-colors">big fish →</a>
           <a href="/crypto" className="hover:text-white transition-colors">crypto →</a>
           <a href="/brain" className="hover:text-white transition-colors">bot brain →</a>
         </div>

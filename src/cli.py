@@ -744,6 +744,35 @@ def crypto_scalp_cmd(
     )
 
 
+@app.command("big-fish")
+def big_fish_cmd(
+    top: int = 25,
+    sort_by: str = typer.Option("dollar_volume", help="dollar_volume | volume | trades | change"),
+) -> None:
+    """Follow the big fish — market-wide volume leaders (where the money is trading)."""
+    from src.bot.alpaca import AlpacaError
+    from src.data.bigfish import get_big_fish
+
+    with console.status("pulling volume leaders..."):
+        try:
+            d = get_big_fish(top=top, sort_by=sort_by)
+        except AlpacaError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            return
+    table = Table(title=f"big fish · volume leaders (by {d['sort_by']})")
+    for col in ["#", "sym", "$ volume", "shares", "price", "chg%", "trades"]:
+        table.add_column(col, justify="left" if col == "sym" else "right")
+    for i, r in enumerate(d["rows"], 1):
+        dv = r["dollar_volume"]
+        dvs = f"${dv / 1e9:.2f}B" if dv >= 1e9 else f"${dv / 1e6:.0f}M"
+        chg = r["change_pct"]
+        table.add_row(
+            str(i), r["symbol"], dvs, f"{r['volume']:,}", f"${r['price']:,.2f}",
+            f"[{'green' if chg >= 0 else 'red'}]{chg:+.1f}%[/]", f"{r['trade_count']:,}",
+        )
+    console.print(table)
+
+
 @app.command("swing-bot-plan")
 def swing_bot_plan_cmd() -> None:
     """Dry-run: build the swing-share plan (buys actual shares; no orders placed)."""

@@ -186,6 +186,20 @@ class AlpacaClient:
                 break
         return {sym: bars[-limit:] for sym, bars in out.items()}
 
+    def most_active_stocks(self, top: int = 25, by: str = "volume") -> list[dict]:
+        """Market-wide most-active stocks (the 'big fish'). by = 'volume' | 'trades'.
+        Returns [{symbol, volume, trade_count}]."""
+        data = self._data_get(
+            "/v1beta1/screener/stocks/most-actives", {"by": by, "top": top}
+        )
+        return data.get("most_actives") or []
+
+    def stock_snapshots(self, symbols: list[str], feed: str = "iex") -> dict[str, dict]:
+        """Latest trade/quote + daily & prev-daily bars per symbol (one request)."""
+        return self._data_get(
+            "/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": feed}
+        )
+
     def crypto_latest_quotes(self, symbols: list[str]) -> dict[str, dict]:
         """Latest bid/ask per symbol with spread % (for cost modeling/entry)."""
         data = self._data_get(
