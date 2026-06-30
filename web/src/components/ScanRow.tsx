@@ -14,7 +14,7 @@ import { ScoreBadge, FactorBar } from "./ScoreBadge";
 import { Flag } from "./Flag";
 import { Logo } from "./Logo";
 
-const TOTAL_COLS = 14;
+const TOTAL_COLS = 15;
 
 export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
   const [take, setTake] = useState<Quicktake | null>(null);
@@ -64,6 +64,15 @@ export function ScanRow({ r, index }: { r: TickerResult; index: number }) {
         <td className="px-3 py-3 mono tabular-nums text-right">{formatPrice(r.price)}</td>
         <td className="px-3 py-3 mono tabular-nums text-right text-[var(--muted)]">
           {formatMarketCap(r.market_cap)}
+        </td>
+        <td className="px-3 py-3 mono tabular-nums text-right">
+          {r.rvol != null ? (
+            <span style={{ color: r.rvol >= 2 ? "#6ee787" : r.rvol >= 1.5 ? "#f5d16e" : "var(--muted)" }}>
+              {r.rvol.toFixed(1)}×
+            </span>
+          ) : (
+            <span className="text-[var(--muted)]">–</span>
+          )}
         </td>
         <td className="px-3 py-3 text-right">
           <ScoreBadge score={r.score} size="md" />

@@ -18,6 +18,10 @@ export type TickerResult = {
   market_cap: number | null;
   score: number;
   pressure_score?: PressureScore;
+  rvol?: number | null;
+  volume?: number | null;
+  avg_volume_20d?: number | null;
+  dollar_volume?: number | null;
   factors: {
     sentiment: FactorScore;
     options: FactorScore;
@@ -40,6 +44,9 @@ export type ScanResult = {
   returned: number;
   weights: Record<string, number>;
   min_score: number;
+  min_rvol?: number;
+  volume_gated?: number;
+  sort_by?: string;
   results: TickerResult[];
   excluded: { ticker: string; reason: string }[];
   cached?: boolean;
@@ -231,13 +238,15 @@ export function fetchScan(params?: {
   limit?: number;
   min_score?: number;
   min_pressure?: number;
-  sort_by?: "composite" | "pressure";
+  min_rvol?: number;
+  sort_by?: "composite" | "pressure" | "volume";
   tickers?: string;
 }): Promise<ScanResult> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.min_score) qs.set("min_score", String(params.min_score));
   if (params?.min_pressure) qs.set("min_pressure", String(params.min_pressure));
+  if (params?.min_rvol != null) qs.set("min_rvol", String(params.min_rvol));
   if (params?.sort_by) qs.set("sort_by", params.sort_by);
   if (params?.tickers) qs.set("tickers", params.tickers);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";

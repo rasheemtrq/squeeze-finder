@@ -107,7 +107,8 @@ def scan_endpoint(
     limit: int = Query(20, ge=1, le=100),
     min_score: float = Query(0, ge=0, le=100),
     min_pressure: float = Query(0, ge=0, le=100),
-    sort_by: str = Query("composite", description="composite (default, discovery) or pressure (imminent best setups)"),
+    min_rvol: float = Query(1.2, ge=0, le=50, description="relative-volume gate: only names trading >= this × their 20d avg (0 = off)"),
+    sort_by: str = Query("composite", description="composite (discovery) | pressure (imminent) | volume (most relative volume)"),
     tickers: str | None = Query(None, description="comma-separated override of default universe"),
     w_sentiment: float = Query(DEFAULT_WEIGHTS["sentiment"], ge=0, le=1),
     w_options: float = Query(DEFAULT_WEIGHTS["options"], ge=0, le=1),
@@ -135,6 +136,7 @@ def scan_endpoint(
         weights=weights,
         min_score=min_score,
         min_pressure=min_pressure,
+        min_rvol=min_rvol,
         limit=limit,
         sort_by=sort_by,
     )

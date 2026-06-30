@@ -6,7 +6,7 @@ export async function ScanTable({
   sort_by = "composite",
 }: {
   limit?: number;
-  sort_by?: "composite" | "pressure";
+  sort_by?: "composite" | "pressure" | "volume";
 }) {
   let data;
   try {
@@ -23,7 +23,7 @@ export async function ScanTable({
     );
   }
 
-  const { results, as_of, scored, universe_size, cache_age_seconds, cache_stale } = data;
+  const { results, as_of, scored, universe_size, cache_age_seconds, cache_stale, min_rvol, volume_gated } = data;
   const ageLabel = cache_age_seconds == null
     ? null
     : cache_age_seconds < 60
@@ -39,6 +39,9 @@ export async function ScanTable({
           </div>
           <div className="text-sm text-[var(--muted)] mono">
             {results.length}/{scored} scored · {universe_size} in universe
+            {min_rvol ? (
+              <> · volume gate ≥{min_rvol}× rvol{volume_gated ? ` (${volume_gated} cut)` : ""}</>
+            ) : null}
           </div>
         </div>
         <div className="text-[11px] mono text-[var(--muted)] flex items-center gap-2">
@@ -60,6 +63,12 @@ export async function ScanTable({
               <th className="text-left font-normal px-3 py-2.5">ticker</th>
               <th className="text-right font-normal px-3 py-2.5">price</th>
               <th className="text-right font-normal px-3 py-2.5">mcap</th>
+              <th
+                className="text-right font-normal px-3 py-2.5"
+                title="relative volume — today's volume vs the name's 20-day average. >1 = trading heavier than usual."
+              >
+                rvol
+              </th>
               <th className="text-right font-normal px-3 py-2.5">score</th>
               <th
                 className="text-right font-normal px-3 py-2.5"
@@ -80,8 +89,8 @@ export async function ScanTable({
           <tbody>
             {results.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
-                  no results — try lowering min_score
+                <td colSpan={15} className="px-3 py-12 text-center text-sm text-[var(--muted)]">
+                  no results — try lowering min_score or the volume gate (min_rvol)
                 </td>
               </tr>
             )}

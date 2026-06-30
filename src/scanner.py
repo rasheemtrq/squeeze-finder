@@ -101,6 +101,27 @@ def fetch_ticker_bundle(ticker: str) -> dict[str, Any]:
     return bundle
 
 
+def _volume_stats(prices_data: dict | None) -> dict[str, Any]:
+    """Relative volume (today vs 20-day avg) + dollar volume from the price bars.
+
+    RVOL is the 'is it getting unusual volume right now' read that gates the scan:
+    >1 means trading heavier than its own recent norm. dollar_volume is shown for
+    context (liquidity). Returns zeros when there isn't enough history."""
+    bars = (prices_data or {}).get("bars") or []
+    if len(bars) < 21:
+        return {"rvol": None, "volume": None, "avg_volume_20d": None, "dollar_volume": None}
+    vols = [b.get("volume") or 0 for b in bars]
+    last_vol = vols[-1]
+    avg20 = sum(vols[-21:-1]) / 20
+    last_close = bars[-1].get("close") or 0
+    return {
+        "rvol": round(last_vol / avg20, 2) if avg20 > 0 else None,
+        "volume": last_vol,
+        "avg_volume_20d": round(avg20),
+        "dollar_volume": round(last_close * last_vol),
+    }
+
+
 def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
     bundle = fetch_ticker_bundle(ticker)
     excluded, red_flag = is_red_flag(bundle)
@@ -143,6 +164,7 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
 
     fund = bundle.get("fundamentals") or {}
     prices_data = bundle.get("prices") or {}
+    vol_stats = _volume_stats(prices_data)
 
     return {
         "ticker": ticker,
@@ -151,6 +173,10 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict[str, Any]:
         "market_cap": fund.get("market_cap"),
         "score": score,
         "pressure_score": pressure,
+        "rvol": vol_stats["rvol"],
+        "volume": vol_stats["volume"],
+        "avg_volume_20d": vol_stats["avg_volume_20d"],
+        "dollar_volume": vol_stats["dollar_volume"],
         "factors": factors,
         "flags": flags,
         "excluded": excluded,
@@ -186,10 +212,11 @@ def scan(
     max_workers: int = 16,
     min_score: float = 0,
     min_pressure: float = 0,
+    min_rvol: float = 1.2,  # relative-volume gate: only show names trading >=1.2x their 20d avg
     limit: int = 20,
     force_refresh: bool = False,
     dynamic_universe: bool = True,
-    sort_by: str = "composite",  # "composite" | "pressure"
+    sort_by: str = "composite",  # "composite" | "pressure" | "volume"
 ) -> dict[str, Any]:
     if tickers:
         universe = tickers
@@ -216,6 +243,7 @@ def scan(
                 "weights": weights,
                 "min_score": min_score,
                 "min_pressure": min_pressure,
+                "min_rvol": min_rvol,
                 "limit": limit,
                 "sort_by": sort_by,
             },
@@ -242,6 +270,7 @@ def scan(
                         max_workers=max_workers,
                         min_score=min_score,
                         min_pressure=min_pressure,
+                        min_rvol=min_rvol,
                         limit=limit,
                         dynamic_universe=dynamic_universe,
                         sort_by=sort_by,
@@ -295,6 +324,11 @@ def scan(
         results.sort(key=_get_pressure, reverse=True)
         primary_filter_key = "pressure"
         filter_threshold = min_pressure
+    elif sort_by in ("volume", "rvol"):
+        # "which is getting the most volume" — rank by relative volume.
+        results.sort(key=lambda r: r.get("rvol") or 0, reverse=True)
+        primary_filter_key = "composite"
+        filter_threshold = min_score
     else:
         results.sort(key=lambda r: r.get("score", 0), reverse=True)
         primary_filter_key = "composite"
@@ -303,14 +337,20 @@ def scan(
     # Filter on the chosen primary metric (min_score always applies to composite
     # for quality floor; min_pressure is additional when sorting by pressure).
     if primary_filter_key == "pressure":
-        filtered = [
+        base = [
             r
             for r in results
             if (r.get("score", 0) >= min_score)
             and (_get_pressure(r) >= filter_threshold)
-        ][:limit]
+        ]
     else:
-        filtered = [r for r in results if r.get("score", 0) >= filter_threshold][:limit]
+        base = [r for r in results if r.get("score", 0) >= filter_threshold]
+
+    # Relative-volume gate: only surface signals on names actually getting
+    # heavy volume (>= min_rvol × their own 20-day average). A None rvol means
+    # we couldn't confirm volume — gate it out rather than show an unconfirmed name.
+    volume_gated = sum(1 for r in base if (r.get("rvol") or 0) < min_rvol)
+    filtered = [r for r in base if (r.get("rvol") or 0) >= min_rvol][:limit]
 
     # Optional lightweight Alpha Vantage enrichment (only on top results, only if key present)
     if ALPHAVANTAGE_API_KEY:
@@ -355,6 +395,8 @@ def scan(
         "regime": regime,
         "min_score": min_score,
         "min_pressure": min_pressure,
+        "min_rvol": min_rvol,
+        "volume_gated": volume_gated,
         "sort_by": sort_by,
         "results": filtered,
         "excluded": errors,
