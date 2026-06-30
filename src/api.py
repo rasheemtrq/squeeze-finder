@@ -44,18 +44,35 @@ NARRATIVE_CACHE_TTL = 1800
 
 
 def _prewarm_scan() -> None:
-    """Background warm-up on server start so the first homepage hit is fast."""
+    """Background warm-up on server start so the first homepage + swings hits are
+    fast. Warms the squeeze scan, then the swing scan (large universe — otherwise
+    the /swings page sits on its loading skeleton for minutes on a cold hit).
+    Sequential, not parallel, to avoid doubling the yfinance rate-limit load."""
     t0 = time.time()
     try:
         result = scan(limit=25)
         logger.info(
-            "prewarm done in %.1fs · scored=%d returned=%d",
+            "prewarm scan done in %.1fs · scored=%d returned=%d",
             time.time() - t0,
             result.get("scored", 0),
             result.get("returned", 0),
         )
     except Exception as e:
-        logger.warning("prewarm failed: %s", e)
+        logger.warning("prewarm scan failed: %s", e)
+
+    t1 = time.time()
+    try:
+        from src.swing_scanner import swing_scan
+
+        sw = swing_scan(limit=25)
+        logger.info(
+            "prewarm swing done in %.1fs · scored=%d returned=%d",
+            time.time() - t1,
+            sw.get("scored", 0),
+            sw.get("returned", 0),
+        )
+    except Exception as e:
+        logger.warning("prewarm swing failed: %s", e)
 
 
 @asynccontextmanager
